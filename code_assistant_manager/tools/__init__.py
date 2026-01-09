@@ -59,6 +59,7 @@ def _ensure_tools_loaded() -> None:
         gemini,
         goose,
         iflow,
+        kimi,
         neovate,
         opencode,
         qodercli,

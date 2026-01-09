@@ -1150,7 +1150,7 @@ def _create_placeholder_commands():
     common_tools = [
         "claude", "codex", "gemini", "copilot", "cursor", "cursor-agent",
         "codebuddy", "crush", "droid", "qwen", "blackbox", "goose",
-        "iflow", "neovate", "opencode", "qodercli", "zed"
+        "iflow", "neovate", "opencode", "qodercli", "zed", "kimi"
     ]
 
     for tool_name in common_tools:
