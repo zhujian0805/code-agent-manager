@@ -185,6 +185,7 @@ def preload_tools() -> Dict[str, Type]:
         gemini,
         goose,
         iflow,
+        kimi,
         neovate,
         opencode,
         qodercli,
