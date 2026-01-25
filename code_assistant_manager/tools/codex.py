@@ -112,9 +112,14 @@ class CodexTool(CLITool):
             return 1
 
         endpoints = self.config.get_sections(exclude_common=True)
-        endpoints = [
-            ep for ep in endpoints if self.endpoint_manager._is_client_supported(ep, "codex")
-        ]
+        filtered_endpoints = []
+        for ep in endpoints:
+            # Check if endpoint is enabled
+            ep_config = self.config.get_endpoint_config(ep)
+            enabled = ep_config.get("enabled", "true").lower() in ("true", "1", "yes")
+            if enabled and self.endpoint_manager._is_client_supported(ep, "codex"):
+                filtered_endpoints.append(ep)
+        endpoints = filtered_endpoints
         if not endpoints:
             return self._handle_error("No endpoints configured for codex")
 

@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -475,7 +474,7 @@ class ConfigManager:
         # Return cached result if still valid
         if self._is_validation_cache_valid(current_time):
             logger.debug("Using cached validation result")
-            return self._validation_cache
+            return self._validation_cache  # type: ignore
 
         logger.debug("Performing fresh config validation")
         errors = []
@@ -592,7 +591,7 @@ def _validate_endpoint(endpoint_name: str, endpoint_config: dict) -> List[str]:
                     errors.append(f"Invalid model ID in list_of_models for {endpoint_name}: {model}")
 
     # Validate boolean fields
-    boolean_fields = ["keep_proxy_config", "use_proxy"]
+    boolean_fields = ["keep_proxy_config", "use_proxy", "enabled"]
     for field_name in boolean_fields:
         value = endpoint_config.get(field_name, "")
         if value and not validate_boolean(value):

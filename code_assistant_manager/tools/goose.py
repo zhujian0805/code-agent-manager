@@ -117,11 +117,14 @@ class GooseTool(CLITool):
     def _get_filtered_endpoints(self) -> List[str]:
         """Collect endpoints that support the goose client."""
         endpoints = self.config.get_sections(exclude_common=True)
-        return [
-            ep
-            for ep in endpoints
-            if self.endpoint_manager._is_client_supported(ep, "goose")
-        ]
+        filtered = []
+        for ep in endpoints:
+            # Check if endpoint is enabled
+            ep_config = self.config.get_endpoint_config(ep)
+            enabled = ep_config.get("enabled", "true").lower() in ("true", "1", "yes")
+            if enabled and self.endpoint_manager._is_client_supported(ep, "goose"):
+                filtered.append(ep)
+        return filtered
 
     def _validate_and_fix_config(self) -> None:
         """Validate that config.yaml references valid custom providers.

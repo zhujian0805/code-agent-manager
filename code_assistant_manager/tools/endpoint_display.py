@@ -23,7 +23,10 @@ def display_tool_endpoints(config_manager: ConfigManager, client_name: str = Non
     if client_name:
         filtered = []
         for ep in endpoints:
-            if endpoint_manager._is_client_supported(ep, client_name):
+            # Check if endpoint is enabled
+            ep_config = config_manager.get_endpoint_config(ep)
+            enabled = ep_config.get("enabled", "true").lower() in ("true", "1", "yes")
+            if enabled and endpoint_manager._is_client_supported(ep, client_name):
                 filtered.append(ep)
         endpoints = filtered
 
@@ -77,7 +80,10 @@ def display_all_tool_endpoints(config_manager: ConfigManager):
         # Filter endpoints by client
         if tool != "copilot":  # Copilot doesn't use endpoint selection
             for ep in endpoints:
-                if endpoint_manager._is_client_supported(ep, tool):
+                # Check if endpoint is enabled
+                ep_config = config_manager.get_endpoint_config(ep)
+                enabled = ep_config.get("enabled", "true").lower() in ("true", "1", "yes")
+                if enabled and endpoint_manager._is_client_supported(ep, tool):
                     tool_endpoints.append(ep)
 
         if tool_endpoints:

@@ -17,11 +17,14 @@ class ContinueTool(CLITool):
     def _get_filtered_endpoints(self) -> List[str]:
         """Collect endpoints that support the continue client."""
         endpoints = self.config.get_sections(exclude_common=True)
-        return [
-            ep
-            for ep in endpoints
-            if self.endpoint_manager._is_client_supported(ep, "continue")
-        ]
+        filtered = []
+        for ep in endpoints:
+            # Check if endpoint is enabled
+            ep_config = self.config.get_endpoint_config(ep)
+            enabled = ep_config.get("enabled", "true").lower() in ("true", "1", "yes")
+            if enabled and self.endpoint_manager._is_client_supported(ep, "continue"):
+                filtered.append(ep)
+        return filtered
 
     def _process_endpoint(self, endpoint_name: str) -> Optional[List[str]]:
         """Process a single endpoint and return selected models if successful."""
