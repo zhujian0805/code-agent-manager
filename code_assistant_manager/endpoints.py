@@ -165,6 +165,19 @@ class EndpointManager:
             print("Error: No endpoints configured in settings.conf")
             return False, None
 
+        # Filter out disabled endpoints
+        enabled_endpoints = []
+        for ep in endpoints:
+            ep_config = self.config.get_endpoint_config(ep)
+            enabled = ep_config.get("enabled", "true").lower() in ("true", "1", "yes")
+            if enabled:
+                enabled_endpoints.append(ep)
+        endpoints = enabled_endpoints
+
+        if not endpoints:
+            print("Error: No enabled endpoints configured in settings.conf")
+            return False, None
+
         # Filter endpoints by client if specified
         if client_name:
             filtered = []

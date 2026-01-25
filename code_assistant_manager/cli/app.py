@@ -12,41 +12,57 @@ except ImportError:
 
 # All imports moved inside functions to improve startup time
 
+
 # Lazy-import heavy command modules to improve startup time
 def _lazy_import_agent_app():
     from code_assistant_manager.cli.agents_commands import agent_app
+
     return agent_app
+
 
 def _lazy_import_plugin_app():
     from code_assistant_manager.cli.plugin_commands import plugin_app
+
     return plugin_app
+
 
 def _lazy_import_prompt_app():
     from code_assistant_manager.cli.prompts_commands import prompt_app
+
     return prompt_app
+
 
 def _lazy_import_skill_app():
     from code_assistant_manager.cli.skills_commands import skill_app
+
     return skill_app
+
 
 def _lazy_import_mcp_app():
     from code_assistant_manager.mcp.cli import app as mcp_app
+
     return mcp_app
+
 
 def _lazy_import_extension_app():
     from code_assistant_manager.cli.extension_commands import extension_app
+
     return extension_app
+
 
 # Logger is created lazily to improve startup time
 def _get_logger():
     """Lazy logger creation to improve startup time."""
     import logging
+
     return logging.getLogger(__name__)
+
 
 # Completion functions (lazy-loaded to improve startup time)
 
 # Lazy-loaded completion scripts to improve startup time
 _completion_scripts = {}
+
 
 def _generate_completion_script(shell: str) -> str:
     """Generate a comprehensive completion script for the given shell."""
@@ -63,9 +79,11 @@ def _generate_completion_script(shell: str) -> str:
     _completion_scripts[shell] = script
     return script
 
+
 def _generate_bash_completion() -> str:
     """Generate bash completion script."""
     return _get_bash_completion_content()
+
 
 def _get_bash_completion_content() -> str:
     """Get the bash completion script content."""
@@ -84,7 +102,7 @@ _code_assistant_manager_completions()
     commands="launch l config cf mcp m prompt p skill s plugin pl agent ag extensions ext upgrade u install i uninstall un doctor d version v completion comp c --help --version --config --endpoints --debug -d"
 
     # Tool names for launch command
-    tools="claude codex copilot gemini droid qwen codebuddy iflow qodercli zed neovate crush cursor-agent ampcode"
+    tools="aichat claude codex copilot gemini droid qwen codebuddy iflow qodercli zed neovate crush cursor-agent ampcode"
 
     # MCP subcommands (mcp server ...)
     mcp_server_commands="list search show add remove update"
@@ -262,7 +280,7 @@ _code_assistant_manager_completions()
         case "${COMP_WORDS[1]}" in
             launch|l)
                 case "${COMP_WORDS[2]}" in
-                    claude|codex|copilot|gemini|droid|qwen|codebuddy|iflow|qodercli|zed|neovate|crush|cursor-agent|ampcode)
+                    aichat|claude|codex|copilot|gemini|droid|qwen|codebuddy|iflow|qodercli|zed|neovate|crush|cursor-agent|ampcode)
                         COMPREPLY=( $(compgen -W "--config --help" -- ${cur}) )
                         return 0
                         ;;
@@ -430,7 +448,7 @@ _code_assistant_manager_completions()
                 ;;
             upgrade|u|install|i)
                 case "${COMP_WORDS[2]}" in
-                    all|claude|codex|copilot|gemini|droid|qwen|codebuddy|iflow|qodercli|zed|neovate|crush|cursor-agent|ampcode|mcp)
+                    all|aichat|claude|codex|copilot|gemini|droid|qwen|codebuddy|iflow|qodercli|zed|neovate|crush|cursor-agent|ampcode|mcp)
                         COMPREPLY=( $(compgen -W "--verbose -v --help" -- ${cur}) )
                         return 0
                         ;;
@@ -438,7 +456,7 @@ _code_assistant_manager_completions()
                 ;;
             uninstall|un)
                 case "${COMP_WORDS[2]}" in
-                    all|claude|codex|copilot|gemini|droid|qwen|codebuddy|iflow|qodercli|zed|neovate|crush|cursor-agent|ampcode)
+                    all|aichat|claude|codex|copilot|gemini|droid|qwen|codebuddy|iflow|qodercli|zed|neovate|crush|cursor-agent|ampcode)
                         COMPREPLY=( $(compgen -W "--force -f --keep-config --help" -- ${cur}) )
                         return 0
                         ;;
@@ -467,9 +485,11 @@ _code_assistant_manager_completions()
 complete -F _code_assistant_manager_completions code-assistant-manager
 complete -F _code_assistant_manager_completions cam"""
 
+
 def _generate_zsh_completion() -> str:
     """Generate zsh completion script."""
     return _get_zsh_completion_content()
+
 
 def _get_zsh_completion_content() -> str:
     """Get the zsh completion script content."""
@@ -514,6 +534,7 @@ _code_assistant_manager() {
     )
 
     tools=(
+        'aichat:AIChat assistant'
         'claude:Claude Code assistant'
         'codex:OpenAI Codex assistant'
         'copilot:GitHub Copilot assistant'
@@ -908,6 +929,7 @@ _code_assistant_manager "$@"
 # Also register for 'cam' alias
 compdef _code_assistant_manager cam"""
 
+
 app = typer.Typer(
     name="cam",
     help="Code Assistant Manager - CLI utilities for working with AI coding assistants",
@@ -918,7 +940,10 @@ app = typer.Typer(
 
 
 @app.callback(invoke_without_command=True)
-def global_options(ctx: Context, debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug logging")):
+def global_options(
+    ctx: Context,
+    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug logging"),
+):
     """Global options for the CLI application."""
     if debug:
         # Configure debug logging for all modules
@@ -948,22 +973,34 @@ def completion(shell: str = typer.Argument(..., help="Shell type (bash, zsh)")):
     typer.echo("# To install, run one of the following:")
     typer.echo("#")
     typer.echo("# Option 1: Add to ~/.bashrc or ~/.zshrc")
-    typer.echo(f"# echo 'source <(code-assistant-manager completion {shell})' >> ~/.{shell}rc")
+    typer.echo(
+        f"# echo 'source <(code-assistant-manager completion {shell})' >> ~/.{shell}rc"
+    )
     typer.echo("#")
     typer.echo("# Option 2: Save to file and source it")
-    typer.echo(f"# code-assistant-manager completion {shell} > ~/.{shell}_completion_code_assistant_manager")
-    typer.echo(f"# echo 'source ~/.{shell}_completion_code_assistant_manager' >> ~/.{shell}rc")
+    typer.echo(
+        f"# code-assistant-manager completion {shell} > ~/.{shell}_completion_code_assistant_manager"
+    )
+    typer.echo(
+        f"# echo 'source ~/.{shell}_completion_code_assistant_manager' >> ~/.{shell}rc"
+    )
     typer.echo("#")
-    typer.echo("# Restart your shell or run 'source ~/.bashrc' (or ~/.zshrc) to apply changes")
+    typer.echo(
+        "# Restart your shell or run 'source ~/.bashrc' (or ~/.zshrc) to apply changes"
+    )
     typer.echo()
     typer.echo("# Completion script:")
     typer.echo("=" * 50)
     typer.echo(completion_script)
 
+
 @app.command("c", hidden=True)
-def completion_alias_short(shell: str = typer.Argument(..., help="Shell type (bash, zsh)")):
+def completion_alias_short(
+    shell: str = typer.Argument(..., help="Shell type (bash, zsh)"),
+):
     """Alias for 'completion' command."""
     return completion(shell)
+
 
 @app.command("comp", hidden=True)
 def completion_alias(shell: str = typer.Argument(..., help="Shell type (bash, zsh)")):
@@ -1037,28 +1074,28 @@ def launch(ctx: Context):
 
         # Load the tool class on-demand after user selection
         registered_tools = get_registered_tools()
-        
+
         # registered_tools keys are command_name (e.g. 'claude'), but selected_tool is registry key (e.g. 'claude-code')
         # We need to find the tool class where tool_key matches selected_tool
         tool_class = None
-        
+
         # Direct match (e.g. 'blackbox')
         if selected_tool in registered_tools:
-             tool_class = registered_tools[selected_tool]
+            tool_class = registered_tools[selected_tool]
         else:
-             # Search by tool_key
-             for cls in registered_tools.values():
-                 # Check tool_key attribute
-                 if getattr(cls, "tool_key", None) == selected_tool:
-                     tool_class = cls
-                     break
-        
+            # Search by tool_key
+            for cls in registered_tools.values():
+                # Check tool_key attribute
+                if getattr(cls, "tool_key", None) == selected_tool:
+                    tool_class = cls
+                    break
+
         if not tool_class:
-             # Fallback: check if we can resolve command_name from registry
-             tool_info = TOOL_REGISTRY.get_tool(selected_tool)
-             cmd_name = tool_info.get("cli_command")
-             if cmd_name and cmd_name in registered_tools:
-                 tool_class = registered_tools[cmd_name]
+            # Fallback: check if we can resolve command_name from registry
+            tool_info = TOOL_REGISTRY.get_tool(selected_tool)
+            cmd_name = tool_info.get("cli_command")
+            if cmd_name and cmd_name in registered_tools:
+                tool_class = registered_tools[cmd_name]
 
         if not tool_class:
             typer.echo(f"Unknown tool: {selected_tool}")
@@ -1072,9 +1109,12 @@ def launch(ctx: Context):
 
 def _create_lazy_tool_command(tool_name: str):
     """Create a lazy command for a tool that loads only when invoked."""
+
     def tool_command(
         ctx: Context,
-        config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to settings.conf configuration file"),
+        config: Optional[str] = typer.Option(
+            None, "--config", "-c", help="Path to settings.conf configuration file"
+        ),
     ):
         """Launch the specified AI code editor."""
         from code_assistant_manager.config import ConfigManager
@@ -1091,9 +1131,11 @@ def _create_lazy_tool_command(tool_name: str):
         ctx.obj["endpoints"] = None
 
         # Get any extra args passed after the tool name
-        tool_args = ctx.args if hasattr(ctx, 'args') else []
+        tool_args = ctx.args if hasattr(ctx, "args") else []
 
-        _get_logger().debug(f"Executing lazy command: {tool_name} with args: {tool_args}")
+        _get_logger().debug(
+            f"Executing lazy command: {tool_name} with args: {tool_args}"
+        )
         config_path = config
         _get_logger().debug(f"Using config path: {config_path}")
 
@@ -1148,24 +1190,49 @@ def _create_placeholder_commands():
     """Create placeholder commands that defer actual tool loading."""
     # Common tool names that users might try
     common_tools = [
-        "claude", "codex", "gemini", "copilot", "cursor", "cursor-agent",
-        "codebuddy", "crush", "droid", "qwen", "blackbox", "goose",
-        "iflow", "neovate", "opencode", "qodercli", "zed", "kimi"
+        "aichat",
+        "claude",
+        "codex",
+        "gemini",
+        "copilot",
+        "cursor",
+        "cursor-agent",
+        "codebuddy",
+        "crush",
+        "droid",
+        "qwen",
+        "blackbox",
+        "goose",
+        "iflow",
+        "neovate",
+        "opencode",
+        "qodercli",
+        "zed",
+        "kimi",
     ]
 
     for tool_name in common_tools:
         # Create a command that will be replaced with the actual implementation on first use
         def make_placeholder(name):
-            def placeholder_cmd(ctx: Context, config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to settings.conf configuration file")):
+            def placeholder_cmd(
+                ctx: Context,
+                config: Optional[str] = typer.Option(
+                    None,
+                    "--config",
+                    "-c",
+                    help="Path to settings.conf configuration file",
+                ),
+            ):
                 # Replace this placeholder with the real command
                 real_cmd = _create_lazy_tool_command(name)
                 # Now execute it
                 return real_cmd(ctx, config)
+
             return placeholder_cmd
 
         editor_app.command(
             name=tool_name,
-            context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
+            context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
         )(make_placeholder(tool_name))
 
 
@@ -1179,13 +1246,17 @@ def create_editor_subcommands():
     _get_logger().debug("Creating editor subcommands")
     registered_tools = get_registered_tools()
     editor_tools = {k: v for k, v in registered_tools.items() if k not in ["mcp"]}
-    _get_logger().debug(f"Found {len(editor_tools)} editor tools: {list(editor_tools.keys())}")
+    _get_logger().debug(
+        f"Found {len(editor_tools)} editor tools: {list(editor_tools.keys())}"
+    )
 
     # Create a wrapper function with default parameters to avoid late binding issues
     def make_command(name, cls):
         def command(
             ctx: Context,
-            config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to settings.conf configuration file"),
+            config: Optional[str] = typer.Option(
+                None, "--config", "-c", help="Path to settings.conf configuration file"
+            ),
         ):
             """Launch the specified AI code editor."""
             # Initialize context object
@@ -1195,8 +1266,8 @@ def create_editor_subcommands():
             ctx.obj["endpoints"] = None
 
             # Get any extra args passed after the tool name
-            tool_args = ctx.args if hasattr(ctx, 'args') else []
-            
+            tool_args = ctx.args if hasattr(ctx, "args") else []
+
             _get_logger().debug(f"Executing command: {name} with args: {tool_args}")
             config_path = config
             _get_logger().debug(f"Using config path: {config_path}")
@@ -1241,7 +1312,7 @@ def create_editor_subcommands():
         # Add the command to the editor app with context settings
         editor_app.command(
             name=tool_name,
-            context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
+            context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
         )(make_command(tool_name, tool_class))
         _get_logger().debug(f"Added command: {tool_name}")
 
@@ -1265,6 +1336,7 @@ app.add_typer(config_app, name="cf", hidden=True)
 # Lazy-loaded sub-apps cache
 _lazy_loaded_apps = {}
 
+
 class LazyTyper:
     """A lazy wrapper for Typer apps that defers loading until first access."""
 
@@ -1285,6 +1357,7 @@ class LazyTyper:
     def __getattr__(self, name):
         """Delegate attribute access to the actual app."""
         return getattr(self._load_app(), name)
+
 
 # Create lazy typer wrappers that defer app loading until first access
 _lazy_mcp_app = LazyTyper(_lazy_import_mcp_app, "mcp")
@@ -1308,18 +1381,24 @@ app.add_typer(_lazy_agent_app, name="ag", hidden=True)
 app.add_typer(_lazy_extension_app, name="extensions")
 app.add_typer(_lazy_extension_app, name="ext", hidden=True)
 
+
 # Core commands - lightweight and always available
 @app.command()
 def doctor(
     ctx: Context,
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    config: Optional[str] = typer.Option(
+        None, "--config", "-c", help="Path to config file"
+    ),
 ):
     """Run diagnostic checks on the code-assistant-manager installation (alias: d)"""
     # Lazy imports for doctor command
     from code_assistant_manager.config import ConfigManager
     from code_assistant_manager.cli.doctor import run_doctor_checks
-    from code_assistant_manager.tools import display_all_tool_endpoints, display_tool_endpoints
+    from code_assistant_manager.tools import (
+        display_all_tool_endpoints,
+        display_tool_endpoints,
+    )
 
     # Initialize context object
     ctx.ensure_object(dict)
@@ -1364,18 +1443,27 @@ def doctor(
     _get_logger().debug("Starting diagnostic checks")
     return run_doctor_checks(config, verbose)
 
+
 @app.command("upgrade")
 def upgrade_command(
     ctx: Context,
     target: str = typer.Argument("all", help="Tool to upgrade or 'all'"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose installer output"),
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose installer output"
+    ),
+    config: Optional[str] = typer.Option(
+        None, "--config", "-c", help="Path to config file"
+    ),
 ):
     """Upgrade CLI tools (alias: u). If not installed, will install."""
     # Lazy imports for upgrade command
     from code_assistant_manager.cli.upgrade import handle_upgrade_command
     from code_assistant_manager.config import ConfigManager
-    from code_assistant_manager.tools import display_all_tool_endpoints, display_tool_endpoints, get_registered_tools
+    from code_assistant_manager.tools import (
+        display_all_tool_endpoints,
+        display_tool_endpoints,
+        get_registered_tools,
+    )
 
     # Initialize context object
     ctx.ensure_object(dict)
@@ -1393,7 +1481,9 @@ def upgrade_command(
         # Validate configuration
         is_valid, errors = config.validate_config()
         if not is_valid:
-            _get_logger().error(f"Configuration validation errors during upgrade: {errors}")
+            _get_logger().error(
+                f"Configuration validation errors during upgrade: {errors}"
+            )
             typer.echo("Configuration validation errors:")
             for error in errors:
                 typer.echo(f"  - {error}")
@@ -1418,13 +1508,17 @@ def upgrade_command(
     _get_logger().debug(f"Starting upgrade process for target: {target}")
     # By default run quietly; verbose flag overrides to show installer output
     import sys
+
     sys.exit(handle_upgrade_command(target, registered_tools, config, verbose=verbose))
+
 
 @app.command("u", hidden=True)
 def upgrade_alias_cmd(
     ctx: Context,
     target: str = typer.Argument("all", help="Tool to upgrade or 'all'"),
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    config: Optional[str] = typer.Option(
+        None, "--config", "-c", help="Path to config file"
+    ),
 ):
     """Alias for 'upgrade' command."""
     # Initialize context object
@@ -1435,12 +1529,17 @@ def upgrade_alias_cmd(
 
     return upgrade_command(ctx, target, False, config)
 
+
 @app.command("install")
 def install_command(
     ctx: Context,
     target: str = typer.Argument("all", help="Tool to install or 'all'"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose installer output"),
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Enable verbose installer output"
+    ),
+    config: Optional[str] = typer.Option(
+        None, "--config", "-c", help="Path to config file"
+    ),
 ):
     """Install CLI tools (alias: i). Same as upgrade - if not installed, will install. If installed, will try to upgrade."""
     # Initialize context object
@@ -1451,11 +1550,14 @@ def install_command(
 
     return upgrade_command(ctx, target, verbose, config)
 
+
 @app.command("i", hidden=True)
 def install_alias_cmd(
     ctx: Context,
     target: str = typer.Argument("all", help="Tool to install or 'all'"),
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    config: Optional[str] = typer.Option(
+        None, "--config", "-c", help="Path to config file"
+    ),
 ):
     """Alias for 'install' command."""
     # Initialize context object
@@ -1466,13 +1568,18 @@ def install_alias_cmd(
 
     return upgrade_command(ctx, target, False, config)
 
+
 @app.command("uninstall")
 def uninstall_command(
     ctx: Context,
     target: str = typer.Argument(..., help="Tool to uninstall or 'all'"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
-    keep_config: bool = typer.Option(False, "--keep-config", "-k", help="Keep configuration files"),
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    keep_config: bool = typer.Option(
+        False, "--keep-config", "-k", help="Keep configuration files"
+    ),
+    config: Optional[str] = typer.Option(
+        None, "--config", "-c", help="Path to config file"
+    ),
 ):
     """Uninstall CLI tools and backup their configuration files."""
     # Lazy imports for uninstall command
@@ -1486,13 +1593,18 @@ def uninstall_command(
 
     return uninstall(ctx, target, force, keep_config)
 
+
 @app.command("un", hidden=True)
 def uninstall_alias(
     ctx: Context,
     target: str = typer.Argument(..., help="Tool to uninstall or 'all'"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
-    keep_config: bool = typer.Option(False, "--keep-config", "-k", help="Keep configuration files"),
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    keep_config: bool = typer.Option(
+        False, "--keep-config", "-k", help="Keep configuration files"
+    ),
+    config: Optional[str] = typer.Option(
+        None, "--config", "-c", help="Path to config file"
+    ),
 ):
     """Alias for 'uninstall' command."""
     # Initialize context object
@@ -1503,6 +1615,7 @@ def uninstall_alias(
 
     return uninstall_command(ctx, target, force, keep_config, config)
 
+
 @app.command("version")
 def version_command():
     """Show version information."""
@@ -1511,16 +1624,20 @@ def version_command():
     typer.echo(f"code-assistant-manager version {__version__}")
     raise typer.Exit()
 
+
 @app.command("v", hidden=True)
 def version_alias():
     """Alias for 'version' command."""
     return version_command()
 
+
 @app.command("d", hidden=True)
 def doctor_alias(
     ctx: Context,
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    config: Optional[str] = typer.Option(
+        None, "--config", "-c", help="Path to config file"
+    ),
 ):
     """Alias for 'doctor' command."""
     # Initialize context object
@@ -1534,7 +1651,9 @@ def doctor_alias(
 
 @config_app.command("validate")
 def validate_config(
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    config: Optional[str] = typer.Option(
+        None, "--config", "-c", help="Path to config file"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
 ):
     """Validate the configuration file for syntax and semantic errors."""
@@ -1716,13 +1835,15 @@ def parse_toml_key_path(key_path):
 
     # First, split by dots but preserve quoted strings
     # Use a regex that matches quoted strings OR unquoted parts
-    parts = re.split(r'(?<!\\)"(?:\\.|[^"\\])*"(?:\s*\.\s*|\s*$)|\s*\.\s*', key_path.strip())
+    parts = re.split(
+        r'(?<!\\)"(?:\\.|[^"\\])*"(?:\s*\.\s*|\s*$)|\s*\.\s*', key_path.strip()
+    )
 
     # Clean up the parts - remove empty strings and whitespace
     cleaned_parts = []
     for part in parts:
         part = part.strip()
-        if part and part not in ['.', '']:
+        if part and part not in [".", ""]:
             # Remove surrounding quotes if present
             if part.startswith('"') and part.endswith('"'):
                 part = part[1:-1].replace('\\"', '"')
@@ -1732,28 +1853,18 @@ def parse_toml_key_path(key_path):
 
 
 @config_app.command("set", short_help="Set a configuration value for code assistants")
-
-
 def set_config(
-
-
     key: str = typer.Argument(
         ..., help="Configuration key path (e.g., 'model' or 'codex.model')"
     ),
-
-    value: str = typer.Argument(
-        ..., help="Value to set"
-    ),
-
+    value: str = typer.Argument(..., help="Value to set"),
     app: str = typer.Option(
         None, "-a", "--app", help="App/tool to operate on (claude, codex, droid, etc.)"
     ),
-    scope: str = typer.Option("user", "--scope", "-s", help="Configuration scope (user, project)"),
-
-
+    scope: str = typer.Option(
+        "user", "--scope", "-s", help="Configuration scope (user, project)"
+    ),
 ):
-
-
     """Set a configuration value for code assistants.
 
 
@@ -1777,28 +1888,15 @@ def set_config(
 
     """
 
-
     from code_assistant_manager.configs import get_tool_config
-
 
     from code_assistant_manager.menu.base import Colors
 
-
-
-
-
     try:
-
-
         key_path = key.strip()
         value = value.strip()
 
-
-
-
-
         # Parse dotted key path using TOML-aware parser
-
 
         # If -a flag is provided, use that as the tool name
         if app:
@@ -1815,98 +1913,50 @@ def set_config(
             prefix = parts[0]  # e.g., "codex"
             config_key = ".".join(parts[1:])  # Reconstruct the key without prefix
 
-
-
-
-
         # Get tool config
-
 
         tool_config = get_tool_config(prefix)
 
-
         if not tool_config:
-
-
             typer.echo(
-
-
                 f"{Colors.RED}✗ Unsupported config prefix (tool): {prefix}{Colors.RESET}"
-
-
             )
-
 
             raise typer.Exit(1)
 
-
-
-
-
         # Set value
-
 
         saved_path = tool_config.set_value(config_key, value, scope)
 
-
-
-
-
         typer.echo(
-
-
             f"{Colors.GREEN}✓ Set {key_path} = {value} ({scope} scope){Colors.RESET}"
-
-
         )
-
 
         typer.echo(f"  Config: {saved_path}")
 
-
-
-
-
     except typer.Exit:
-
-
         raise
 
-
     except Exception as e:
-
-
         typer.echo(f"{Colors.RED}✗ Failed to set config value: {e}{Colors.RESET}")
-
 
         raise typer.Exit(1)
 
 
-
-
-
-
-
-
-@config_app.command("unset", short_help="Unset a configuration value for code assistants")
-
-
+@config_app.command(
+    "unset", short_help="Unset a configuration value for code assistants"
+)
 def unset_config(
-
-
     key_path: str = typer.Argument(
         ..., help="Configuration key path (e.g., 'model' or 'codex.model')"
     ),
-
     app: str = typer.Option(
         None, "-a", "--app", help="App/tool to operate on (claude, codex, droid, etc.)"
     ),
-
-    scope: str = typer.Option("user", "--scope", "-s", help="Configuration scope (user, project)"),
-
+    scope: str = typer.Option(
+        "user", "--scope", "-s", help="Configuration scope (user, project)"
+    ),
 ):
-
-
     """Unset a configuration value for code assistants.
 
 
@@ -1930,24 +1980,12 @@ def unset_config(
 
     """
 
-
     from code_assistant_manager.configs import get_tool_config
-
 
     from code_assistant_manager.menu.base import Colors
 
-
-
-
-
     try:
-
-
         key_path = key_path.strip()
-
-
-
-
 
         # Parse dotted key path
         parts = parse_toml_key_path(key_path)
@@ -1966,188 +2004,78 @@ def unset_config(
             prefix = parts[0]
             config_key = ".".join(parts[1:])
 
-
-
-
-
         # Get tool config
-
 
         tool_config = get_tool_config(prefix)
 
-
         if not tool_config:
-
-
             typer.echo(
-
-
                 f"{Colors.RED}✗ Unsupported config prefix (tool): {prefix}{Colors.RESET}"
-
-
             )
-
 
             raise typer.Exit(1)
 
-
-
-
-
         found = tool_config.unset_value(config_key, scope)
 
-
-
-
-
         if not found:
-
-
             typer.echo(
-
-
                 f"{Colors.YELLOW}! Key '{key_path}' not found in {scope} config{Colors.RESET}"
-
-
             )
-
 
             raise typer.Exit(0)
 
-
-
-
-
-        typer.echo(
-
-
-            f"{Colors.GREEN}✓ Unset {key_path} from {scope} scope{Colors.RESET}"
-
-
-        )
-
-
-
-
+        typer.echo(f"{Colors.GREEN}✓ Unset {key_path} from {scope} scope{Colors.RESET}")
 
     except typer.Exit:
-
-
         raise
 
-
     except Exception as e:
-
-
         typer.echo(f"{Colors.RED}✗ Failed to unset config value: {e}{Colors.RESET}")
-
 
         raise typer.Exit(1)
 
 
-
-
-
-
-
-
 def flatten_config(data: dict, prefix: str = "") -> dict:
-
-
     """Flatten nested dictionary into dotted notation."""
-
 
     result = {}
 
-
-
-
-
     def _flatten(obj, current_prefix):
-
-
         if isinstance(obj, dict):
-
-
             for key, value in obj.items():
-
-
                 new_prefix = f"{current_prefix}.{key}" if current_prefix else key
-
 
                 _flatten(value, new_prefix)
 
-
         elif isinstance(obj, list):
-
-
             # For lists, flatten each element with index
 
             for i, item in enumerate(obj):
                 new_prefix = f"{current_prefix}.{i}" if current_prefix else str(i)
                 _flatten(item, new_prefix)
 
-
         else:
-
-
             # Convert all values to strings
-
 
             result[current_prefix] = str(obj)
 
-
-
-
-
     _flatten(data, prefix)
-
 
     return result
 
 
-
-
-
-
-
-
 @config_app.command("show", short_help="Show configuration in dotted format")
-
-
 def show_config(
-
-
     key_path: Optional[str] = typer.Argument(
-
-
         None, help="Specific config key path to show (optional)"
-
-
     ),
-
-
     app: str = typer.Option(
-
-
         "claude", "-a", "--app", help="App to show config for (default: claude)"
-
-
     ),
-
-
     scope: Optional[str] = typer.Option(
-
-
         None, "--scope", "-s", help="Filter by scope (user, project)"
-
-
     ),
-
-
 ):
-
-
     """Show configuration for an AI editor app in dotted notation format.
 
 
@@ -2171,273 +2099,133 @@ def show_config(
 
     """
 
-
     from code_assistant_manager.configs import get_tool_config
-
 
     from code_assistant_manager.menu.base import Colors
 
-
-
-
-
     try:
-
-
         tool_config = get_tool_config(app)
 
-
         if not tool_config:
-
-
             typer.echo(f"{Colors.RED}✗ Unknown app: {app}{Colors.RESET}")
-
 
             raise typer.Exit(1)
 
-
-
-
-
         # Load configs
-
 
         # If specific scope requested, we get a dict with just that scope (BaseToolConfig returns same structure if scope arg is passed? No, check implementation)
 
-
         # BaseToolConfig.load_config(scope) returns JUST the data dict for that scope if scope is provided.
-
 
         # But existing logic expects a structure mapping scope -> {data, path}.
 
-
         # So I need to adapt the usage or the BaseToolConfig.load_config behavior.
-
 
         # BaseToolConfig.load_config(None) returns scope mapping. That fits.
 
-
-        
-
-
         if scope:
+            # Just load all and filter here to keep consistent structure for display logic below
 
+            all_configs = tool_config.load_config()
 
-             # Just load all and filter here to keep consistent structure for display logic below
-
-
-             all_configs = tool_config.load_config()
-
-
-             if scope not in all_configs:
-
-
+            if scope not in all_configs:
                 typer.echo(
-
-
                     f"{Colors.YELLOW}No configuration found for {app} in scope '{scope}'{Colors.RESET}"
-
-
                 )
-
 
                 return
 
-
-             configs_to_show = {scope: all_configs[scope]}
-
+            configs_to_show = {scope: all_configs[scope]}
 
         else:
+            all_configs = tool_config.load_config()
 
-
-             all_configs = tool_config.load_config()
-
-
-             configs_to_show = all_configs
-
-
-
-
+            configs_to_show = all_configs
 
         if not configs_to_show:
-
-
             typer.echo(f"{Colors.YELLOW}No configuration found for {app}{Colors.RESET}")
 
-
             return
-
-
-
-
 
         # Collect and flatten all requested configs
 
-
         merged_flattened = {}
-
 
         key_sources = {}
 
-
-
-
-
         # Sort scopes so that project overrides user in the merged view
 
-
         for s_name in ["user", "project"]:
-
-
             if s_name in configs_to_show:
-
-
                 s_data = configs_to_show[s_name]["data"]
-
 
                 s_path = configs_to_show[s_name]["path"]
 
-
                 flattened = flatten_config(s_data, app)
 
-
                 for k, v in flattened.items():
-
-
                     merged_flattened[k] = v
-
 
                     key_sources[k] = (s_name, s_path)
 
-
-
-
-
         if not merged_flattened:
-
-
-            typer.echo(f"{Colors.YELLOW}No keys found in requested scope(s){Colors.RESET}")
-
+            typer.echo(
+                f"{Colors.YELLOW}No keys found in requested scope(s){Colors.RESET}"
+            )
 
             return
 
-
-
-
-
         # Header
-
 
         typer.echo(f"{Colors.CYAN}{app.upper()} Configuration:{Colors.RESET}")
 
-
         for s_name, s_info in configs_to_show.items():
-
-
             typer.echo(f"  {Colors.BOLD}[{s_name}]{Colors.RESET} {s_info['path']}")
-
 
         typer.echo()
 
-
-
-
-
         # Filter by key_path if provided
-
 
         keys_to_show = sorted(merged_flattened.keys())
 
-
         if key_path:
-
-
             import re
 
-
-
-
-
             if "*" in key_path:
-
-
                 pattern = re.escape(key_path).replace(r"\*", "[^.]+")
-
 
                 regex = re.compile(f"^{pattern}$")
 
-
                 keys_to_show = [k for k in keys_to_show if regex.match(k)]
 
-
             else:
-
-
                 # Direct match or prefix match
 
-
                 keys_to_show = [
-
-
                     k
-
-
                     for k in keys_to_show
-
-
                     if k == key_path or k.startswith(key_path + ".")
-
-
                 ]
 
-
-
-
-
             if not keys_to_show:
-
-
                 typer.echo(
-
-
                     f"{Colors.RED}✗ Key '{key_path}' not found in {app} configuration{Colors.RESET}"
-
-
                 )
-
 
                 raise typer.Exit(1)
 
-
-
-
-
         # Display keys
 
-
         for key in keys_to_show:
-
-
             value = merged_flattened[key]
-
 
             s_name, s_path = key_sources[key]
 
-
             scope_tag = f" {Colors.DIM}({s_name}){Colors.RESET}" if not scope else ""
-
 
             typer.echo(f"{Colors.GREEN}{key}{Colors.RESET} = {value}{scope_tag}")
 
-
-
-
-
     except Exception as e:
-
-
         typer.echo(f"{Colors.RED}✗ Failed to show config: {e}{Colors.RESET}")
 
-
         raise typer.Exit(1)
-
