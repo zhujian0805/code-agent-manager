@@ -55,6 +55,7 @@ class ClaudeTool(CLITool):
                 .set_multiple_models({"CLAUDE_MODELS": "primary_model,secondary_model"})
                 .set_custom_var("DISABLE_NON_ESSENTIAL_MODEL_CALLS", "1")
                 .set_custom_var("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
+                .set_custom_var("CLAUDE_CODE_ATTRIBUTION_HEADER", "0")
                 .set_node_tls_reject_unauthorized()
             )
             env = env_builder.build()
@@ -75,7 +76,8 @@ class ClaudeTool(CLITool):
                 f"ANTHROPIC_SMALL_FAST_MODEL={secondary_model} "
                 f"ANTHROPIC_DEFAULT_HAIKU_MODEL={primary_model} "
                 f"DISABLE_NON_ESSENTIAL_MODEL_CALLS=1 "
-                f"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 {command_str}"
+                f"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 "
+                f"CLAUDE_CODE_ATTRIBUTION_HEADER=0 {command_str}"
             )
             print("")
             return self._run_tool_with_env(command, env, "claude", interactive=True)
