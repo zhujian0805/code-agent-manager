@@ -17,6 +17,9 @@
   - `cam prompt install` - Install configured prompts to app files
   - `cam prompt status` - Enhanced to show file paths
 
+### Fixed
+- **CLI Option Flags**: Removed unsupported short flags from non-boolean options to align with Typer behavior. Use `--config` and `--scope` instead of `-c` and `-s`.
+
 ## [1.1.0] - 2024-12-30
 
 ### Added

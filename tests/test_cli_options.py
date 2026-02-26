@@ -32,14 +32,14 @@ class TestCLIOptions:
         assert isinstance(CONFIG_FILE_OPTION, OptionInfo)
         assert CONFIG_FILE_OPTION.default is None
         assert "--config" in CONFIG_FILE_OPTION.param_decls
-        assert "-c" in CONFIG_FILE_OPTION.param_decls
+        assert "-c" not in CONFIG_FILE_OPTION.param_decls
 
     def test_config_option(self):
         """Test CONFIG_OPTION is properly defined."""
         assert isinstance(CONFIG_OPTION, OptionInfo)
         assert CONFIG_OPTION.default is None
         assert "--config" in CONFIG_OPTION.param_decls
-        assert "-c" in CONFIG_OPTION.param_decls
+        assert "-c" not in CONFIG_OPTION.param_decls
         assert "settings.conf" in CONFIG_OPTION.help
 
     def test_debug_option(self):
@@ -80,7 +80,7 @@ class TestCLIOptions:
         assert isinstance(SCOPE_OPTION, OptionInfo)
         assert SCOPE_OPTION.default == "user"
         assert "--scope" in SCOPE_OPTION.param_decls
-        assert "-s" in SCOPE_OPTION.param_decls
+        assert "-s" not in SCOPE_OPTION.param_decls
 
     def test_target_option(self):
         """Test TARGET_OPTION is properly defined."""

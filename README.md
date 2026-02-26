@@ -140,6 +140,8 @@ Marketplace extensions for supported assistants (GitHub repos or local paths).
 | `cam config` | `cf` | Manage CAM's internal configuration files |
 | `cam version` | `v` | Display current version |
 
+Note: non-boolean CLI options are long-form only. For example, use `--config` and `--scope` (not `-c` or `-s`).
+
 ---
 
 ## Governance & Quality
