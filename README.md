@@ -43,19 +43,43 @@ pip install -e ".[dev]"
 
 ## Quick Start
 
-1. **Set up your API keys** in a `.env` file:
+1. **Create your base config files**:
+   ```bash
+   mkdir -p ~/.config/code-assistant-manager
+   cp code_assistant_manager/providers.json ~/.config/code-assistant-manager/providers.json
+   touch ~/.env
+   chmod 600 ~/.env
+   ```
+
+2. **Set up your API keys** in `.env`:
    ```env
    ANTHROPIC_API_KEY="your-anthropic-key"
    GITHUB_TOKEN="your-github-token"
    GEMINI_API_KEY="your-gemini-key"
    ```
 
-2. **Launch the interactive menu:**
+3. **Launch the interactive menu:**
    ```bash
    cam launch
    ```
 
-3. **Select your assistant and start coding!**
+4. **Select your assistant and start coding!**
+
+### Configuration files
+
+CAM uses these main configuration files:
+
+- `~/.config/code-assistant-manager/providers.json`: endpoint/provider settings used by `cam`.
+- `~/.env`: API keys and sensitive environment variables.
+- `~/.config/code-assistant-manager/config.yaml`: repository-source config for skills, agents, and plugins.
+
+### How `config.yaml` is used for skill/agent/plugin repos
+
+- CAM loads `~/.config/code-assistant-manager/config.yaml` first; if missing, it falls back to bundled `code_assistant_manager/config.yaml`.
+- The file defines source lists for `skills`, `agents`, and `plugins`.
+- Local JSON sources (`skill_repos.json`, `agent_repos.json`, `plugin_repos.json`) are loaded first.
+- Remote sources are merged after local sources and do not override existing local keys.
+- Remote responses are cached in `~/.cache/code-assistant-manager/repos` (TTL controlled by `config.yaml`).
 
 ---
 
