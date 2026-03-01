@@ -56,10 +56,10 @@ pip install -e ".[dev]"
    ```
 
 2. **Set up your API keys** in `.env`:
-   ```env
-   ANTHROPIC_API_KEY="your-anthropic-key"
-   GITHUB_TOKEN="your-github-token"
-   GEMINI_API_KEY="your-gemini-key"
+   ```bash
+   export ANTHROPIC_API_KEY="your-anthropic-key"
+   export GITHUB_TOKEN="your-github-token"
+   export GEMINI_API_KEY="your-gemini-key"
    ```
 
 3. **Source the environment file and verify setup:**
