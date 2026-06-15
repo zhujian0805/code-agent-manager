@@ -208,6 +208,21 @@ func TestDoctorValidatesProvidersConfigAndEnv(t *testing.T) {
 	}
 }
 
+func TestLaunchWithoutToolShowsInteractiveBubbleTeaMenu(t *testing.T) {
+	stdout, stderr, code := execute(t, "launch")
+	if code != 0 {
+		t.Fatalf("launch exit code = %d, want 0; stderr=%s", code, stderr)
+	}
+	for _, want := range []string{"Manage tools", "claude", "Use ↑/↓ or j/k", "Enter to select"} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("interactive menu output missing %q\nstdout:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "Available tools:") {
+		t.Fatalf("launch should show Bubble Tea menu instead of legacy plain list\nstdout:\n%s", stdout)
+	}
+}
+
 func TestLaunchKnownToolPrintsResolvedEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	providersFile := filepath.Join(dir, "providers.json")
@@ -238,12 +253,13 @@ func TestLaunchRejectsUnknownTool(t *testing.T) {
 	}
 }
 
-func TestManagementCommandsHaveWorkingListInstallRemoveFlow(t *testing.T) {
+func TestManagementCommandsHaveWorkingListAddRemoveFlow(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("CAM_CONFIG_DIR", filepath.Join(dir, "cfg"))
 	for _, group := range []string{"agent", "prompt", "skill", "plugin"} {
 		t.Run(group, func(t *testing.T) {
-			store := filepath.Join(dir, group+"s.json")
-			stdout, stderr, code := execute(t, "--store", store, group, "list")
+			stdout, stderr, code := execute(t, group, "list")
 			if code != 0 {
 				t.Fatalf("list exit code = %d, want 0; stderr=%s", code, stderr)
 			}
@@ -251,20 +267,20 @@ func TestManagementCommandsHaveWorkingListInstallRemoveFlow(t *testing.T) {
 				t.Fatalf("empty list output unexpected: %s", stdout)
 			}
 
-			stdout, stderr, code = execute(t, "--store", store, group, "install", "example")
+			stdout, stderr, code = execute(t, group, "add", "example", "--description", "Example "+group, "-f", writeTempFile(t, "example body"))
 			if code != 0 {
-				t.Fatalf("install exit code = %d, want 0; stderr=%s", code, stderr)
+				t.Fatalf("add exit code = %d, want 0; stderr=%s", code, stderr)
 			}
-			if !strings.Contains(stdout, "Installed example") {
-				t.Fatalf("install output unexpected: %s", stdout)
+			if !strings.Contains(stdout, "Added "+group+" example") {
+				t.Fatalf("add output unexpected: %s", stdout)
 			}
 
-			stdout, stderr, code = execute(t, "--store", store, group, "list")
+			stdout, stderr, code = execute(t, group, "list")
 			if code != 0 || !strings.Contains(stdout, "example") {
-				t.Fatalf("list after install code=%d stdout=%s stderr=%s", code, stdout, stderr)
+				t.Fatalf("list after add code=%d stdout=%s stderr=%s", code, stdout, stderr)
 			}
 
-			stdout, stderr, code = execute(t, "--store", store, group, "remove", "example")
+			stdout, stderr, code = execute(t, group, "remove", "example")
 			if code != 0 || !strings.Contains(stdout, "Removed example") {
 				t.Fatalf("remove code=%d stdout=%s stderr=%s", code, stdout, stderr)
 			}
@@ -272,9 +288,20 @@ func TestManagementCommandsHaveWorkingListInstallRemoveFlow(t *testing.T) {
 	}
 }
 
+func writeTempFile(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "in")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestMCPServerAddListRemoveFlow(t *testing.T) {
-	store := filepath.Join(t.TempDir(), "mcp.json")
-	stdout, stderr, code := execute(t, "--store", store, "mcp", "add", "context7", "--command", "npx", "--arg", "-y", "--arg", "@upstash/context7-mcp")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	stdout, stderr, code := execute(t, "mcp", "add", "context7", "--client", "claude", "--command", "npx", "--arg", "-y", "--arg", "@upstash/context7-mcp")
 	if code != 0 {
 		t.Fatalf("add exit code = %d, want 0; stderr=%s", code, stderr)
 	}
@@ -282,12 +309,12 @@ func TestMCPServerAddListRemoveFlow(t *testing.T) {
 		t.Fatalf("add output unexpected: %s", stdout)
 	}
 
-	stdout, stderr, code = execute(t, "--store", store, "mcp", "list")
+	stdout, stderr, code = execute(t, "mcp", "list", "--client", "claude")
 	if code != 0 || !strings.Contains(stdout, "context7") || !strings.Contains(stdout, "npx") {
 		t.Fatalf("list code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
 
-	stdout, stderr, code = execute(t, "--store", store, "mcp", "remove", "context7")
+	stdout, stderr, code = execute(t, "mcp", "remove", "context7", "--client", "claude")
 	if code != 0 || !strings.Contains(stdout, "Removed context7") {
 		t.Fatalf("remove code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
