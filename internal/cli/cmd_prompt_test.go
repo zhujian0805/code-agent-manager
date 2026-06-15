@@ -1,68 +1,62 @@
 package cli_test
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chat2anyllm/code-agent-manager/internal/entities"
 )
 
-// Empty store reports "No prompts installed".
+// --- list ------------------------------------------------------------------
+
 func TestPromptListWhenEmpty(t *testing.T) {
 	isolatedHome(t)
 	stdout, _, code := execute(t, "prompt", "list")
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
-	if !strings.Contains(stdout, "No prompts installed") {
+	if !strings.Contains(stdout, "No prompts installed across agents") {
 		t.Fatalf("missing empty state:\n%s", stdout)
 	}
 }
 
-// Add → list → show → remove round-trip.
-func TestPromptAddListShowRemoveRoundTrip(t *testing.T) {
-	isolatedHome(t)
-	body := writeTempFile(t, "Hello\n")
-
-	stdout, _, code := execute(t, "prompt", "add", "demo", "--description", "Test", "-f", body)
+func TestPromptListShowsInstalled(t *testing.T) {
+	home := isolatedHome(t)
+	installEntityToApp(t, home, entities.KindPrompt, "", "prompt content", "claude")
+	stdout, _, code := execute(t, "prompt", "list")
 	if code != 0 {
-		t.Fatalf("add exit = %d", code)
+		t.Fatalf("exit = %d", code)
 	}
-	if !strings.Contains(stdout, "Added prompt demo") {
-		t.Fatalf("add output:\n%s", stdout)
-	}
-
-	stdout, _, _ = execute(t, "prompt", "list")
-	if !strings.Contains(stdout, "demo") {
-		t.Fatalf("list missing demo:\n%s", stdout)
-	}
-
-	stdout, _, code = execute(t, "prompt", "show", "demo")
-	if code != 0 {
-		t.Fatalf("show exit = %d", code)
-	}
-	var entry map[string]any
-	if err := json.Unmarshal([]byte(stdout), &entry); err != nil {
-		t.Fatalf("show output not JSON: %v\n%s", err, stdout)
-	}
-	if entry["name"] != "demo" || entry["kind"] != "prompt" {
-		t.Fatalf("show entry wrong: %v", entry)
-	}
-
-	stdout, _, code = execute(t, "prompt", "remove", "demo")
-	if code != 0 || !strings.Contains(stdout, "Removed demo") {
-		t.Fatalf("remove code=%d stdout=%s", code, stdout)
+	if !strings.Contains(stdout, "claude") {
+		t.Fatalf("list missing claude:\n%s", stdout)
 	}
 }
 
-// `install` requires --app and writes the rendered content into the app's path.
+// --- search ----------------------------------------------------------------
+
+func TestPromptSearchFindsMatch(t *testing.T) {
+	isolatedHome(t)
+	seedEntity(t, entities.KindPrompt, "greeting", "Hello", "A greeting prompt")
+	seedEntity(t, entities.KindPrompt, "farewell", "Bye", "A farewell prompt")
+	stdout, _, code := execute(t, "prompt", "search", "greeting", "--local")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if !strings.Contains(stdout, "greeting") {
+		t.Fatalf("search missing match:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "farewell") {
+		t.Fatalf("search should not include non-matching:\n%s", stdout)
+	}
+}
+
+// --- install ---------------------------------------------------------------
+
 func TestPromptInstallWritesContentToAppPath(t *testing.T) {
 	home := isolatedHome(t)
-	if _, _, code := execute(t, "prompt", "add", "demo", "-f", writeTempFile(t, "prompt body")); code != 0 {
-		t.Fatalf("seed add exit = %d", code)
-	}
-
+	seedEntity(t, entities.KindPrompt, "demo", "prompt body", "")
 	stdout, _, code := execute(t, "prompt", "install", "demo", "--app", "claude")
 	if code != 0 {
 		t.Fatalf("install exit = %d", code)
@@ -79,12 +73,9 @@ func TestPromptInstallWritesContentToAppPath(t *testing.T) {
 	}
 }
 
-// Missing --app on install errors out and mentions supported apps.
 func TestPromptInstallWithoutAppErrors(t *testing.T) {
 	isolatedHome(t)
-	if _, _, code := execute(t, "prompt", "add", "demo", "-f", writeTempFile(t, "body")); code != 0 {
-		t.Fatalf("seed add exit = %d", code)
-	}
+	seedEntity(t, entities.KindPrompt, "demo", "body", "")
 	_, stderr, code := execute(t, "prompt", "install", "demo")
 	if code == 0 {
 		t.Fatal("expected non-zero exit without --app")
@@ -94,62 +85,15 @@ func TestPromptInstallWithoutAppErrors(t *testing.T) {
 	}
 }
 
-// Export/import round-trip works through JSON.
-func TestPromptExportImportRoundTrip(t *testing.T) {
-	isolatedHome(t)
-	if _, _, code := execute(t, "prompt", "add", "alpha", "-f", writeTempFile(t, "a")); code != 0 {
-		t.Fatalf("seed exit = %d", code)
-	}
-	if _, _, code := execute(t, "prompt", "add", "beta", "-f", writeTempFile(t, "b")); code != 0 {
-		t.Fatalf("seed exit = %d", code)
-	}
-	exportPath := filepath.Join(t.TempDir(), "out.json")
-	if _, _, code := execute(t, "prompt", "export", "-f", exportPath); code != 0 {
-		t.Fatalf("export exit = %d", code)
-	}
-	raw, err := os.ReadFile(exportPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var items []map[string]any
-	if err := json.Unmarshal(raw, &items); err != nil {
-		t.Fatal(err)
-	}
-	if len(items) != 2 {
-		t.Fatalf("expected 2 items, got %d", len(items))
-	}
+// --- alias -----------------------------------------------------------------
 
-	// Wipe store and reimport.
-	isolatedHome(t)
-	stdout, _, code := execute(t, "prompt", "import", "-f", exportPath)
-	if code != 0 {
-		t.Fatalf("import exit = %d", code)
-	}
-	if !strings.Contains(stdout, "Imported 2 prompts") {
-		t.Fatalf("import output: %s", stdout)
-	}
-}
-
-// Remove of a missing prompt is benign (exit 0, "Not found").
-func TestPromptRemoveMissingIsBenign(t *testing.T) {
-	isolatedHome(t)
-	stdout, _, code := execute(t, "prompt", "remove", "ghost")
-	if code != 0 {
-		t.Fatalf("exit = %d", code)
-	}
-	if !strings.Contains(stdout, "Not found") {
-		t.Fatalf("missing 'Not found': %s", stdout)
-	}
-}
-
-// `cam p` alias works.
 func TestPromptAliasP(t *testing.T) {
 	isolatedHome(t)
 	stdout, _, code := execute(t, "p", "list")
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
-	if !strings.Contains(stdout, "No prompts installed") {
+	if !strings.Contains(stdout, "No prompts installed across agents") {
 		t.Fatalf("alias p output: %s", stdout)
 	}
 }

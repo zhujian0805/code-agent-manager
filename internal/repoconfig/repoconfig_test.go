@@ -1,0 +1,289 @@
+package repoconfig
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/chat2anyllm/code-agent-manager/internal/entities"
+)
+
+func TestBundledSkillRepos(t *testing.T) {
+	repos, err := loadBundled(entities.KindSkill)
+	if err != nil {
+		t.Fatalf("loadBundled(skill): %v", err)
+	}
+	if len(repos) == 0 {
+		t.Fatal("expected at least one bundled skill repo")
+	}
+	// Check a known entry from the bundled file.
+	if _, ok := repos["obra/superpowers"]; !ok {
+		t.Error("expected obra/superpowers in bundled skill repos")
+	}
+}
+
+func TestBundledAgentRepos(t *testing.T) {
+	repos, err := loadBundled(entities.KindAgent)
+	if err != nil {
+		t.Fatalf("loadBundled(agent): %v", err)
+	}
+	if len(repos) == 0 {
+		t.Fatal("expected at least one bundled agent repo")
+	}
+	if _, ok := repos["iannuttall/claude-agents"]; !ok {
+		t.Error("expected iannuttall/claude-agents in bundled agent repos")
+	}
+}
+
+func TestBundledPluginRepos(t *testing.T) {
+	repos, err := loadBundled(entities.KindPlugin)
+	if err != nil {
+		t.Fatalf("loadBundled(plugin): %v", err)
+	}
+	if len(repos) == 0 {
+		t.Fatal("expected at least one bundled plugin repo")
+	}
+	if _, ok := repos["superpowers-marketplace"]; !ok {
+		t.Error("expected superpowers-marketplace in bundled plugin repos")
+	}
+}
+
+func TestBundledPromptReposReturnsEmpty(t *testing.T) {
+	repos, err := loadBundled(entities.KindPrompt)
+	if err != nil {
+		t.Fatalf("loadBundled(prompt): %v", err)
+	}
+	if repos == nil {
+		t.Fatal("expected non-nil empty map for prompt kind, got nil")
+	}
+	if len(repos) != 0 {
+		t.Fatalf("expected 0 bundled prompt repos, got %d", len(repos))
+	}
+}
+
+func TestRepoEntryIsEnabled(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	tests := []struct {
+		name     string
+		entry    RepoEntry
+		expected bool
+	}{
+		{"nil defaults true", RepoEntry{}, true},
+		{"explicit true", RepoEntry{Enabled: &trueVal}, true},
+		{"explicit false", RepoEntry{Enabled: &falseVal}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.entry.IsEnabled(); got != tt.expected {
+				t.Errorf("IsEnabled() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRepoEntryEffectiveOwnerName(t *testing.T) {
+	// Standard entry.
+	r := RepoEntry{Owner: "alice", Name: "my-repo"}
+	if r.EffectiveOwner() != "alice" {
+		t.Errorf("EffectiveOwner() = %q", r.EffectiveOwner())
+	}
+	if r.EffectiveName() != "my-repo" {
+		t.Errorf("EffectiveName() = %q", r.EffectiveName())
+	}
+
+	// Plugin-style entry prefers RepoOwner/RepoName.
+	p := RepoEntry{Owner: "alice", Name: "old", RepoOwner: "bob", RepoName: "new-repo"}
+	if p.EffectiveOwner() != "bob" {
+		t.Errorf("EffectiveOwner() = %q, want bob", p.EffectiveOwner())
+	}
+	if p.EffectiveName() != "new-repo" {
+		t.Errorf("EffectiveName() = %q, want new-repo", p.EffectiveName())
+	}
+}
+
+func TestRepoEntryEffectiveBranch(t *testing.T) {
+	tests := []struct {
+		name     string
+		entry    RepoEntry
+		expected string
+	}{
+		{"default main", RepoEntry{}, "main"},
+		{"branch set", RepoEntry{Branch: "develop"}, "develop"},
+		{"repoBranch preferred", RepoEntry{Branch: "develop", RepoBranch: "release"}, "release"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.entry.EffectiveBranch(); got != tt.expected {
+				t.Errorf("EffectiveBranch() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRepoEntrySubPath(t *testing.T) {
+	r := RepoEntry{SkillsPath: "skills", AgentsPath: "agents", PluginPath: "plugins"}
+	if r.SubPath(entities.KindSkill) != "skills" {
+		t.Errorf("SubPath(skill) = %q", r.SubPath(entities.KindSkill))
+	}
+	if r.SubPath(entities.KindAgent) != "agents" {
+		t.Errorf("SubPath(agent) = %q", r.SubPath(entities.KindAgent))
+	}
+	if r.SubPath(entities.KindPlugin) != "plugins" {
+		t.Errorf("SubPath(plugin) = %q", r.SubPath(entities.KindPlugin))
+	}
+}
+
+func TestParseRepoJSON(t *testing.T) {
+	input := `{
+		"my-org/my-repo": {
+			"owner": "my-org",
+			"name": "my-repo",
+			"branch": "main",
+			"enabled": true
+		}
+	}`
+	repos, err := parseRepoJSON([]byte(input))
+	if err != nil {
+		t.Fatalf("parseRepoJSON: %v", err)
+	}
+	if len(repos) != 1 {
+		t.Fatalf("expected 1 repo, got %d", len(repos))
+	}
+	r := repos["my-org/my-repo"]
+	if r.Owner != "my-org" || r.Name != "my-repo" {
+		t.Errorf("unexpected owner/name: %q/%q", r.Owner, r.Name)
+	}
+}
+
+func TestLoadLocalSource(t *testing.T) {
+	// Create a temporary config dir with a skill_repos.json.
+	tmpDir := t.TempDir()
+
+	data := map[string]RepoEntry{
+		"test/repo": {
+			Owner:  "test",
+			Name:   "repo",
+			Branch: "main",
+		},
+	}
+	raw, _ := json.MarshalIndent(data, "", "  ")
+	path := filepath.Join(tmpDir, "skill_repos.json")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	repos, err := loadLocalSource(path)
+	if err != nil {
+		t.Fatalf("loadLocalSource: %v", err)
+	}
+	if len(repos) != 1 {
+		t.Fatalf("expected 1 repo, got %d", len(repos))
+	}
+	if _, ok := repos["test/repo"]; !ok {
+		t.Error("expected test/repo in loaded repos")
+	}
+}
+
+func TestLoadLocalSourceMissing(t *testing.T) {
+	repos, err := loadLocalSource("/nonexistent/path/repos.json")
+	if err != nil {
+		t.Fatalf("loadLocalSource: %v", err)
+	}
+	if repos != nil {
+		t.Errorf("expected nil for missing file, got %v", repos)
+	}
+}
+
+func TestLoadLocalSourceExpandsTilde(t *testing.T) {
+	// Create a temp file and refer to it via ~ expansion.
+	tmpDir := t.TempDir()
+	data := map[string]RepoEntry{
+		"tilde/test": {Owner: "tilde", Name: "test", Branch: "main"},
+	}
+	raw, _ := json.MarshalIndent(data, "", "  ")
+	path := filepath.Join(tmpDir, "repos.json")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// loadLocalSource should handle absolute paths fine.
+	repos, err := loadLocalSource(path)
+	if err != nil {
+		t.Fatalf("loadLocalSource: %v", err)
+	}
+	if _, ok := repos["tilde/test"]; !ok {
+		t.Error("expected tilde/test in loaded repos")
+	}
+}
+
+func TestLoadEnabledFilters(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("CAM_CONFIG_DIR", tmpDir)
+
+	falseVal := false
+	data := map[string]RepoEntry{
+		"enabled/repo": {
+			Owner:  "enabled",
+			Name:   "repo",
+			Branch: "main",
+		},
+		"disabled/repo": {
+			Owner:   "disabled",
+			Name:    "repo",
+			Branch:  "main",
+			Enabled: &falseVal,
+		},
+	}
+	raw, _ := json.MarshalIndent(data, "", "  ")
+	reposPath := filepath.Join(tmpDir, "agent_repos.json")
+	if err := os.WriteFile(reposPath, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a config.yaml that points to the local repos file.
+	configYAML := fmt.Sprintf(`repositories:
+  agents:
+    sources:
+      - type: local
+        path: %s
+cache:
+  enabled: false
+  directory: %s/cache
+  ttl_seconds: 3600
+`, reposPath, tmpDir)
+	if err := os.WriteFile(filepath.Join(tmpDir, "config.yaml"), []byte(configYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	repos, err := LoadEnabled(entities.KindAgent)
+	if err != nil {
+		t.Fatalf("LoadEnabled: %v", err)
+	}
+	if _, ok := repos["disabled/repo"]; ok {
+		t.Error("disabled/repo should have been filtered out")
+	}
+	// enabled/repo should be present (from local source in config.yaml).
+	if _, ok := repos["enabled/repo"]; !ok {
+		t.Error("enabled/repo should be present")
+	}
+}
+
+func TestRepoConfigKey(t *testing.T) {
+	tests := []struct {
+		kind     entities.Kind
+		expected string
+	}{
+		{entities.KindSkill, "skills"},
+		{entities.KindAgent, "agents"},
+		{entities.KindPlugin, "plugins"},
+	}
+	for _, tt := range tests {
+		if got := repoConfigKey(tt.kind); got != tt.expected {
+			t.Errorf("repoConfigKey(%s) = %q, want %q", tt.kind, got, tt.expected)
+		}
+	}
+}

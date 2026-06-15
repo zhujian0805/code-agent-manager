@@ -37,6 +37,10 @@ func New() *Client {
 // DownloadGitHubZip fetches an owner/repo/branch zip and extracts it under
 // destRoot.  The returned path is the root of the extracted tree (which
 // GitHub generates as "<repo>-<branch>/").
+//
+// When the requested branch returns HTTP 404, it automatically retries with
+// common fallback branches (e.g. "master" when "main" was tried, or vice
+// versa) before giving up.
 func (c *Client) DownloadGitHubZip(owner, repo, branch, destRoot string) (string, error) {
 	if owner == "" || repo == "" {
 		return "", errors.New("fetching: owner and repo are required")
@@ -44,6 +48,33 @@ func (c *Client) DownloadGitHubZip(owner, repo, branch, destRoot string) (string
 	if branch == "" {
 		branch = "main"
 	}
+
+	// Build the ordered list of branches to try.
+	branches := []string{branch}
+	switch branch {
+	case "main":
+		branches = append(branches, "master")
+	case "master":
+		branches = append(branches, "main")
+	}
+
+	var lastErr error
+	for _, br := range branches {
+		path, err := c.downloadBranchZip(owner, repo, br, destRoot)
+		if err == nil {
+			return path, nil
+		}
+		lastErr = err
+		// Only retry on 404; any other error is returned immediately.
+		if !strings.Contains(err.Error(), "HTTP 404") {
+			return "", err
+		}
+	}
+	return "", lastErr
+}
+
+// downloadBranchZip does the actual download for a single branch.
+func (c *Client) downloadBranchZip(owner, repo, branch, destRoot string) (string, error) {
 	url := fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/%s.zip", owner, repo, branch)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {

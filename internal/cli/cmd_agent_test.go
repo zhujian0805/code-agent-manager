@@ -5,7 +5,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chat2anyllm/code-agent-manager/internal/entities"
 )
+
+// --- list ------------------------------------------------------------------
 
 func TestAgentListWhenEmpty(t *testing.T) {
 	isolatedHome(t)
@@ -13,37 +17,49 @@ func TestAgentListWhenEmpty(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
-	if !strings.Contains(stdout, "No agents installed") {
+	if !strings.Contains(stdout, "No agents installed across agents") {
 		t.Fatalf("missing empty state:\n%s", stdout)
 	}
 }
 
-func TestAgentAddListShowRemoveRoundTrip(t *testing.T) {
-	isolatedHome(t)
-	body := writeTempFile(t, "agent content")
-	if _, _, code := execute(t, "agent", "add", "code-reviewer", "-f", body, "--description", "Code review agent"); code != 0 {
-		t.Fatalf("add exit = %d", code)
+func TestAgentListShowsInstalled(t *testing.T) {
+	home := isolatedHome(t)
+	installEntityToApp(t, home, entities.KindAgent, "code-reviewer", "agent content", "claude")
+	stdout, _, code := execute(t, "agent", "list")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
 	}
-	stdout, _, _ := execute(t, "agent", "list")
 	if !strings.Contains(stdout, "code-reviewer") {
 		t.Fatalf("list missing agent:\n%s", stdout)
 	}
-	stdout, _, code := execute(t, "agent", "show", "code-reviewer")
-	if code != 0 || !strings.Contains(stdout, "code-reviewer") {
-		t.Fatalf("show code=%d stdout=%s", code, stdout)
-	}
-	stdout, _, code = execute(t, "agent", "remove", "code-reviewer")
-	if code != 0 || !strings.Contains(stdout, "Removed code-reviewer") {
-		t.Fatalf("remove code=%d stdout=%s", code, stdout)
+	if !strings.Contains(stdout, "claude") {
+		t.Fatalf("list missing app name:\n%s", stdout)
 	}
 }
 
+// --- search ----------------------------------------------------------------
+
+func TestAgentSearchFindsMatch(t *testing.T) {
+	isolatedHome(t)
+	seedEntity(t, entities.KindAgent, "code-reviewer", "content", "Code review agent")
+	seedEntity(t, entities.KindAgent, "test-runner", "content", "Runs tests")
+	stdout, _, code := execute(t, "agent", "search", "review", "--local")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if !strings.Contains(stdout, "code-reviewer") {
+		t.Fatalf("search missing match:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "test-runner") {
+		t.Fatalf("search should not include non-matching:\n%s", stdout)
+	}
+}
+
+// --- install ---------------------------------------------------------------
+
 func TestAgentInstallCreatesAgentDirectoryWithMarkdown(t *testing.T) {
 	home := isolatedHome(t)
-	body := writeTempFile(t, "agent body")
-	if _, _, code := execute(t, "agent", "add", "code-reviewer", "-f", body); code != 0 {
-		t.Fatalf("seed exit = %d", code)
-	}
+	seedEntity(t, entities.KindAgent, "code-reviewer", "agent body", "")
 	stdout, _, code := execute(t, "agent", "install", "code-reviewer", "--app", "claude")
 	if code != 0 {
 		t.Fatalf("install exit = %d", code)
@@ -61,21 +77,7 @@ func TestAgentInstallCreatesAgentDirectoryWithMarkdown(t *testing.T) {
 	}
 }
 
-func TestAgentUninstallRemovesDirectory(t *testing.T) {
-	home := isolatedHome(t)
-	if _, _, code := execute(t, "agent", "add", "x", "-f", writeTempFile(t, "body")); code != 0 {
-		t.Fatal("seed failed")
-	}
-	if _, _, code := execute(t, "agent", "install", "x", "--app", "claude"); code != 0 {
-		t.Fatal("install failed")
-	}
-	if _, _, code := execute(t, "agent", "uninstall", "x", "--app", "claude"); code != 0 {
-		t.Fatal("uninstall failed")
-	}
-	if _, err := os.Stat(filepath.Join(home, ".claude", "agents", "x")); !os.IsNotExist(err) {
-		t.Fatalf("directory still present: %v", err)
-	}
-}
+// --- alias -----------------------------------------------------------------
 
 func TestAgentAliasAg(t *testing.T) {
 	isolatedHome(t)
@@ -83,7 +85,7 @@ func TestAgentAliasAg(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
-	if !strings.Contains(stdout, "No agents installed") {
+	if !strings.Contains(stdout, "No agents installed across agents") {
 		t.Fatalf("alias output: %s", stdout)
 	}
 }
