@@ -19,14 +19,15 @@ var bundledYAML []byte
 // Tool represents a single tools.yaml entry — the subset CAM needs at launch
 // and install time.  Unknown fields are tolerated (documentation only).
 type Tool struct {
-	Name          string    `yaml:"-"`
-	Enabled       *bool     `yaml:"enabled"`
-	InstallCmd    string    `yaml:"install_cmd"`
-	CLICommand    string    `yaml:"cli_command"`
-	Description   string    `yaml:"description"`
-	Env           Env       `yaml:"env"`
-	Configuration any       `yaml:"configuration"`
-	CLIParameters CLIParams `yaml:"cli_parameters"`
+	Name          string        `yaml:"-"`
+	Enabled       *bool         `yaml:"enabled"`
+	InstallCmd    string        `yaml:"install_cmd"`
+	CLICommand    string        `yaml:"cli_command"`
+	Description   string        `yaml:"description"`
+	Env           Env           `yaml:"env"`
+	Configuration any           `yaml:"configuration"`
+	CLIParameters CLIParams     `yaml:"cli_parameters"`
+	ConfigTarget  *ConfigTarget `yaml:"config_target,omitempty"`
 }
 
 // Env captures the env: block for a tool.
@@ -37,6 +38,16 @@ type Env struct {
 	Optional    map[string]string `yaml:"optional"`
 	Managed     map[string]string `yaml:"managed"`
 	Removed     []string          `yaml:"removed"`
+}
+
+// ConfigTarget captures the config_target: block for a tool: which file CAM
+// writes/updates before launching, what format it is, and the key paths
+// (with placeholders) to upsert or remove.
+type ConfigTarget struct {
+	Path   string            `yaml:"path"`
+	Format string            `yaml:"format"`
+	Upsert map[string]string `yaml:"upsert"`
+	Remove []string          `yaml:"remove"`
 }
 
 // CLIParams captures the cli_parameters block.

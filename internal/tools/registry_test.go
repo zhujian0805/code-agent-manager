@@ -1,4 +1,4 @@
-package tools_test
+package tools
 
 import (
 	"reflect"
@@ -6,11 +6,69 @@ import (
 	"testing"
 
 	"github.com/chat2anyllm/code-agent-manager/internal/providers"
-	"github.com/chat2anyllm/code-agent-manager/internal/tools"
 )
 
+func TestParseRegistry_LoadsConfigTarget(t *testing.T) {
+	data := []byte(`
+tools:
+  claude-code:
+    cli_command: claude
+    config_target:
+      path: ~/.claude/settings.json
+      format: json
+      upsert:
+        env.ANTHROPIC_BASE_URL: "{endpoint}"
+        env.ANTHROPIC_AUTH_TOKEN: "{api_key}"
+      remove:
+        - env.LEGACY_KEY
+`)
+	reg, err := parseRegistry(data)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	tool, ok := reg.Get("claude-code")
+	if !ok {
+		t.Fatal("claude-code missing")
+	}
+	ct := tool.ConfigTarget
+	if ct == nil {
+		t.Fatal("ConfigTarget nil")
+	}
+	if ct.Path != "~/.claude/settings.json" {
+		t.Errorf("path = %q, want ~/.claude/settings.json", ct.Path)
+	}
+	if ct.Format != "json" {
+		t.Errorf("format = %q, want json", ct.Format)
+	}
+	if got := ct.Upsert["env.ANTHROPIC_BASE_URL"]; got != "{endpoint}" {
+		t.Errorf("upsert env.ANTHROPIC_BASE_URL = %q, want {endpoint}", got)
+	}
+	if got := ct.Upsert["env.ANTHROPIC_AUTH_TOKEN"]; got != "{api_key}" {
+		t.Errorf("upsert env.ANTHROPIC_AUTH_TOKEN = %q, want {api_key}", got)
+	}
+	if len(ct.Remove) != 1 || ct.Remove[0] != "env.LEGACY_KEY" {
+		t.Errorf("remove = %v, want [env.LEGACY_KEY]", ct.Remove)
+	}
+}
+
+func TestParseRegistry_NoConfigTarget_NilPointer(t *testing.T) {
+	data := []byte(`
+tools:
+  gemini-cli:
+    cli_command: gemini
+`)
+	reg, err := parseRegistry(data)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	tool, _ := reg.Get("gemini-cli")
+	if tool.ConfigTarget != nil {
+		t.Errorf("ConfigTarget = %v, want nil", tool.ConfigTarget)
+	}
+}
+
 func TestLoadDefaultIncludesCoreTools(t *testing.T) {
-	r, err := tools.LoadDefault()
+	r, err := LoadDefault()
 	if err != nil {
 		t.Fatalf("LoadDefault err = %v", err)
 	}
@@ -25,7 +83,7 @@ func TestLoadDefaultIncludesCoreTools(t *testing.T) {
 }
 
 func TestByCLICommandMapsBinaryToToolKey(t *testing.T) {
-	r, err := tools.LoadDefault()
+	r, err := LoadDefault()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +97,7 @@ func TestByCLICommandMapsBinaryToToolKey(t *testing.T) {
 }
 
 func TestLaunchNamesDeduplicatesAndSorts(t *testing.T) {
-	r, err := tools.LoadDefault()
+	r, err := LoadDefault()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,10 +121,10 @@ func TestLaunchNamesDeduplicatesAndSorts(t *testing.T) {
 func TestResolveLaunchEnvSubstitutesPlaceholders(t *testing.T) {
 	t.Setenv("OPENAI_KEY", "sk-test")
 	ep := providers.Endpoint{Endpoint: "https://api.example.com", APIKeyEnv: "OPENAI_KEY"}
-	tool := tools.Tool{
+	tool := Tool{
 		Name:       "openai-codex",
 		CLICommand: "codex",
-		Env: tools.Env{
+		Env: Env{
 			Exported: map[string]string{
 				"BASE_URL":       "{BASE_URL}",
 				"OPENAI_API_KEY": "{api_key}",
@@ -75,7 +133,7 @@ func TestResolveLaunchEnvSubstitutesPlaceholders(t *testing.T) {
 				"NODE_TLS_REJECT_UNAUTHORIZED": "0",
 			},
 		},
-		CLIParameters: tools.CLIParams{
+		CLIParameters: CLIParams{
 			Injected: []string{
 				"-c model_providers.custom.base_url={BASE_URL}",
 				"-c profiles.custom.model={selected_model}",
@@ -83,7 +141,7 @@ func TestResolveLaunchEnvSubstitutesPlaceholders(t *testing.T) {
 			},
 		},
 	}
-	launch := tools.ResolveLaunchEnv(tool, ep, "openai", "gpt-4o-mini")
+	launch := ResolveLaunchEnv(tool, ep, "openai", "gpt-4o-mini")
 	if launch.Env["BASE_URL"] != "https://api.example.com" {
 		t.Fatalf("BASE_URL = %q", launch.Env["BASE_URL"])
 	}
@@ -106,11 +164,11 @@ func TestResolveLaunchEnvSubstitutesPlaceholders(t *testing.T) {
 
 func TestResolveLaunchEnvRemovedVarsAreCleared(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "http://proxy.example.com:8080")
-	tool := tools.Tool{
+	tool := Tool{
 		Name: "droid",
-		Env:  tools.Env{Removed: []string{"HTTPS_PROXY"}},
+		Env:  Env{Removed: []string{"HTTPS_PROXY"}},
 	}
-	launch := tools.ResolveLaunchEnv(tool, providers.Endpoint{}, "", "")
+	launch := ResolveLaunchEnv(tool, providers.Endpoint{}, "", "")
 	if _, ok := launch.Env["HTTPS_PROXY"]; ok {
 		t.Fatalf("HTTPS_PROXY should be removed: %v", launch.Env)
 	}
@@ -119,8 +177,8 @@ func TestResolveLaunchEnvRemovedVarsAreCleared(t *testing.T) {
 func TestResolveLaunchEnvAppliesToolDefaults(t *testing.T) {
 	t.Setenv("ANTHROPIC_KEY", "ak-test")
 	ep := providers.Endpoint{Endpoint: "https://anthropic.example.com", APIKeyEnv: "ANTHROPIC_KEY"}
-	tool := tools.Tool{Name: "claude-code", CLICommand: "claude"}
-	launch := tools.ResolveLaunchEnv(tool, ep, "anthropic", "claude-3-opus")
+	tool := Tool{Name: "claude-code", CLICommand: "claude"}
+	launch := ResolveLaunchEnv(tool, ep, "anthropic", "claude-3-opus")
 	if launch.Env["ANTHROPIC_BASE_URL"] != ep.Endpoint {
 		t.Fatalf("ANTHROPIC_BASE_URL = %q", launch.Env["ANTHROPIC_BASE_URL"])
 	}
