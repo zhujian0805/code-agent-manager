@@ -175,3 +175,60 @@ func TestLaunchDryRunDoesNotTouchDisk(t *testing.T) {
 		t.Errorf("dry-run wrote file %s (err = %v)", target, err)
 	}
 }
+
+// Auto-select reports both endpoint and model on stderr so scripts can
+// see which provider/model CAM picked.
+func TestLaunchAutoSelectLogsToStderr(t *testing.T) {
+	isolatedHome(t)
+	providersFile := filepath.Join(t.TempDir(), "providers.json")
+	payload := `{"endpoints":{"only":{"endpoint":"https://x","supported_client":"claude","list_of_models":["m1"]}}}`
+	if err := os.WriteFile(providersFile, []byte(payload), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, code := execute(t, "--providers", providersFile, "launch", "claude", "--dry-run")
+	if code != 0 {
+		t.Fatalf("exit = %d; stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stderr, "[cam] auto-selected endpoint: only") {
+		t.Errorf("missing endpoint log in stderr: %s", stderr)
+	}
+	if !strings.Contains(stderr, "[cam] auto-selected model: m1") {
+		t.Errorf("missing model log in stderr: %s", stderr)
+	}
+}
+
+// In auto mode, when an endpoint has list_models_cmd but no static
+// list, CAM runs the discovery command and picks the first model.
+func TestLaunchAutoSelectInvokesListModelsCmd(t *testing.T) {
+	isolatedHome(t)
+	providersFile := filepath.Join(t.TempDir(), "providers.json")
+	payload := `{"endpoints":{"dyn":{"endpoint":"https://x","supported_client":"claude","list_models_cmd":"printf 'one\\ntwo\\n'"}}}`
+	if err := os.WriteFile(providersFile, []byte(payload), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code := execute(t, "--providers", providersFile, "launch", "claude", "--dry-run")
+	if code != 0 {
+		t.Fatalf("exit = %d; stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stdout, "Model: one") {
+		t.Fatalf("expected first discovered model in dry-run, got:\n%s", stdout)
+	}
+}
+
+// When an endpoint pinned by --endpoint does not support the requested
+// tool, launch refuses with a clear error.
+func TestLaunchPinnedEndpointUnsupportedForTool(t *testing.T) {
+	isolatedHome(t)
+	providersFile := filepath.Join(t.TempDir(), "providers.json")
+	payload := `{"endpoints":{"qwenonly":{"endpoint":"https://x","supported_client":"qwen","list_of_models":["m"]}}}`
+	if err := os.WriteFile(providersFile, []byte(payload), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, code := execute(t, "--providers", providersFile, "launch", "claude", "--endpoint", "qwenonly")
+	if code == 0 {
+		t.Fatalf("expected non-zero exit")
+	}
+	if !strings.Contains(stderr, "does not support tool") {
+		t.Fatalf("stderr missing unsupported-client message: %s", stderr)
+	}
+}

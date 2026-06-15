@@ -51,6 +51,11 @@ func (a *App) extensionsCommand() *cobra.Command {
 	return cmd
 }
 
+// extensionBrowseURL is the canonical extension catalog endpoint.  Tests can
+// override it via the CAM_EXTENSION_BROWSE_URL env var so they don't hit the
+// real network.
+const extensionBrowseURL = "https://geminicli.com/extensions.json"
+
 func extensionBrowseCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "browse",
@@ -58,8 +63,12 @@ func extensionBrowseCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
+			url := extensionBrowseURL
+			if override := os.Getenv("CAM_EXTENSION_BROWSE_URL"); override != "" {
+				url = override
+			}
 			client := &http.Client{Timeout: 15 * time.Second}
-			resp, err := client.Get("https://geminicli.com/extensions.json")
+			resp, err := client.Get(url)
 			if err != nil {
 				return fmt.Errorf("browse: %w", err)
 			}

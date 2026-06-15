@@ -10,9 +10,16 @@ tools:
         - ["GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION", "GOOGLE_GENAI_USE_VERTEXAI"]
       managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      # Per Gemini CLI docs (2026-06-15), endpoint/auth are env-var
+      # only; only model.name is file-configurable.
+      path: ~/.gemini/settings.json
+      format: json
+      upsert:
+        model.name: "{selected_model}"
     configuration:
       notes:
-        - "No code-agent-manager endpoint selection; authentication is driven by environment variables."
+        - "Endpoint and credentials are env-var only (GEMINI_API_KEY / GOOGLE_*); CAM writes model.name into settings.json."
     cli_parameters:
       injected: []
     filesystem:
@@ -333,14 +340,22 @@ tools:
     env:
       managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.config/crush/crush.json
+      format: json
+      upsert:
+        providers.{endpoint_name}.type: "openai-compat"
+        providers.{endpoint_name}.base_url: "{endpoint}"
+        providers.{endpoint_name}.api_key: "{api_key}"
+        providers.{endpoint_name}.models[+].id: "{selected_model}"
     configuration:
       notes:
-        - "Configures MCP servers from the local registry into crush.json"
+        - "Configures providers.<endpoint_name> with openai-compat type and appends the selected model id."
     cli_parameters:
       injected: []
     filesystem:
       generated:
-        - "~/.config/crush/crush.json containing MCP server configurations"
+        - "~/.config/crush/crush.json containing provider + model configuration"
 
   cursor-agent:
     enabled: true
@@ -370,17 +385,24 @@ tools:
     env:
       managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.config/opencode/opencode.json
+      format: json
+      upsert:
+        provider.{endpoint_name}.npm: "@ai-sdk/openai-compatible"
+        provider.{endpoint_name}.name: "{endpoint_name}"
+        provider.{endpoint_name}.options.baseURL: "{endpoint}"
+        provider.{endpoint_name}.options.apiKey: "{api_key}"
+        model: "{endpoint_name}/{selected_model}"
     configuration:
       notes:
-        - "OpenCode.ai supports 75+ LLM providers via AI SDK and Models.dev"
-        - "API keys are configured via 'opencode /connect' command and stored in ~/.local/share/opencode/auth.json"
-        - "Providers and models are configured in opencode.json"
-        - "MCP servers can be configured in opencode.json under the 'mcp' section"
+        - "Writes a provider.<endpoint_name> block using the openai-compatible adapter and sets top-level model to <endpoint_name>/<selected_model>."
+        - "Credentials may also be stored via the runtime command 'opencode /connect' into ~/.local/share/opencode/auth.json; CAM writes them inline instead."
     cli_parameters:
       injected: []
     filesystem:
       touched:
-        - "~/.local/share/opencode/auth.json (API key storage)"
+        - "~/.local/share/opencode/auth.json (API key storage when /connect is used)"
         - "~/.config/opencode/opencode.json (provider and MCP server configuration)"
 
   continue:
@@ -391,12 +413,20 @@ tools:
     env:
       managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.continue/config.yaml
+      format: yaml
+      upsert:
+        schema: "v1"
+        models[name={endpoint_name}/{selected_model}].name: "{endpoint_name}/{selected_model}"
+        models[name={endpoint_name}/{selected_model}].provider: "openai"
+        models[name={endpoint_name}/{selected_model}].model: "{selected_model}"
+        models[name={endpoint_name}/{selected_model}].apiBase: "{endpoint}"
+        models[name={endpoint_name}/{selected_model}].apiKey: "{api_key}"
     configuration:
       notes:
-        - "Continue.dev is an open-source AI coding assistant"
-        - "Configuration is stored in ~/.continue/config.yaml"
-        - "MCP servers can be configured in config.yaml under 'mcpServers'"
-        - "Supports multiple AI providers and models"
+        - "Continue.dev's models[] array is keyed by .name; CAM upserts an entry named <endpoint_name>/<selected_model>."
+        - "The same config.yaml is shared with the Continue VS Code extension."
     cli_parameters:
       injected: []
     filesystem:
@@ -411,10 +441,19 @@ tools:
     env:
       managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      # Per Goose docs (2026-06-15), GOOSE_PROVIDER + GOOSE_MODEL are
+      # writable in config.yaml; custom base_url/api_key are env-var
+      # only (GOOSE_PROVIDER__HOST / GOOSE_PROVIDER__API_KEY).
+      path: ~/.config/goose/config.yaml
+      format: yaml
+      upsert:
+        GOOSE_PROVIDER: "{endpoint_name}"
+        GOOSE_MODEL: "{selected_model}"
     configuration:
       notes:
+        - "Only GOOSE_PROVIDER + GOOSE_MODEL are written. Custom base_url/api_key require env vars (GOOSE_PROVIDER__HOST, GOOSE_PROVIDER__API_KEY)."
         - "Goose is an open-source AI agent that automates development tasks."
-        - "It runs locally and supports multiple LLM providers."
         - "Configuration and extensions via Model Context Protocol (MCP)."
     cli_parameters:
       injected: []

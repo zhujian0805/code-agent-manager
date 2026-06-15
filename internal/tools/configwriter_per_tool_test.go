@@ -312,3 +312,181 @@ func TestPerTool_Neovate_GoldenJSON(t *testing.T) {
 		t.Errorf("model = %v", mp["model"])
 	}
 }
+
+func TestPerTool_Crush_GoldenJSON(t *testing.T) {
+	tool, path := loadToolFromRegistry(t, "crush", "crush.json")
+	ep := providers.Endpoint{Endpoint: "https://api.test"}
+	if _, err := WriteConfig(tool, ep, "myprov", "model-x", "sk-1"); err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	mp := got["providers"].(map[string]any)["myprov"].(map[string]any)
+	if mp["type"] != "openai-compat" {
+		t.Errorf("type = %v", mp["type"])
+	}
+	if mp["base_url"] != "https://api.test" {
+		t.Errorf("base_url = %v", mp["base_url"])
+	}
+	if mp["api_key"] != "sk-1" {
+		t.Errorf("api_key = %v", mp["api_key"])
+	}
+	models := mp["models"].([]any)
+	if len(models) != 1 {
+		t.Fatalf("models len = %d, want 1", len(models))
+	}
+	if models[0].(map[string]any)["id"] != "model-x" {
+		t.Errorf("models[0].id = %v", models[0].(map[string]any)["id"])
+	}
+}
+
+func TestPerTool_Opencode_GoldenJSON(t *testing.T) {
+	tool, path := loadToolFromRegistry(t, "opencode", "opencode.json")
+	ep := providers.Endpoint{Endpoint: "https://api.test"}
+	if _, err := WriteConfig(tool, ep, "myprov", "model-x", "sk-1"); err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	if got["model"] != "myprov/model-x" {
+		t.Errorf("model = %v, want myprov/model-x", got["model"])
+	}
+	prov := got["provider"].(map[string]any)["myprov"].(map[string]any)
+	if prov["npm"] != "@ai-sdk/openai-compatible" {
+		t.Errorf("provider.npm = %v", prov["npm"])
+	}
+	if prov["name"] != "myprov" {
+		t.Errorf("provider.name = %v", prov["name"])
+	}
+	options := prov["options"].(map[string]any)
+	if options["baseURL"] != "https://api.test" {
+		t.Errorf("options.baseURL = %v", options["baseURL"])
+	}
+	if options["apiKey"] != "sk-1" {
+		t.Errorf("options.apiKey = %v", options["apiKey"])
+	}
+}
+
+func TestPerTool_Continue_GoldenYAML(t *testing.T) {
+	tool, path := loadToolFromRegistry(t, "continue", "config.yaml")
+	ep := providers.Endpoint{Endpoint: "https://api.test"}
+	if _, err := WriteConfig(tool, ep, "myprov", "model-x", "sk-1"); err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	var got map[string]any
+	if err := yaml.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	if got["schema"] != "v1" {
+		t.Errorf("schema = %v", got["schema"])
+	}
+	models := got["models"].([]any)
+	if len(models) != 1 {
+		t.Fatalf("models len = %d, want 1", len(models))
+	}
+	m := models[0].(map[string]any)
+	if m["name"] != "myprov/model-x" {
+		t.Errorf("model name = %v", m["name"])
+	}
+	if m["provider"] != "openai" {
+		t.Errorf("model provider = %v", m["provider"])
+	}
+	if m["model"] != "model-x" {
+		t.Errorf("model model = %v", m["model"])
+	}
+	if m["apiBase"] != "https://api.test" {
+		t.Errorf("model apiBase = %v", m["apiBase"])
+	}
+	if m["apiKey"] != "sk-1" {
+		t.Errorf("model apiKey = %v", m["apiKey"])
+	}
+}
+
+func TestPerTool_Continue_ArrayUpsertByName(t *testing.T) {
+	tool, path := loadToolFromRegistry(t, "continue", "config.yaml")
+	ep := providers.Endpoint{Endpoint: "https://api.test"}
+	if _, err := WriteConfig(tool, ep, "myprov", "model-x", "sk-1"); err != nil {
+		t.Fatal(err)
+	}
+	// Second write with same (provider, model) must upsert in place.
+	if _, err := WriteConfig(tool, ep, "myprov", "model-x", "sk-2"); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	var got map[string]any
+	yaml.Unmarshal(raw, &got)
+	models := got["models"].([]any)
+	if len(models) != 1 {
+		t.Fatalf("len = %d, want 1 (upsert in place)", len(models))
+	}
+	if models[0].(map[string]any)["apiKey"] != "sk-2" {
+		t.Errorf("apiKey = %v, want sk-2 (latest)", models[0].(map[string]any)["apiKey"])
+	}
+	// Third write with a different model must append.
+	if _, err := WriteConfig(tool, ep, "myprov", "model-y", "sk-3"); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = os.ReadFile(path)
+	yaml.Unmarshal(raw, &got)
+	models = got["models"].([]any)
+	if len(models) != 2 {
+		t.Fatalf("len = %d, want 2 (append for new model)", len(models))
+	}
+}
+
+func TestPerTool_GeminiCLI_ModelOnly_JSON(t *testing.T) {
+	tool, path := loadToolFromRegistry(t, "gemini-cli", "settings.json")
+	ep := providers.Endpoint{Endpoint: "https://api.test"}
+	if _, err := WriteConfig(tool, ep, "myprov", "gemini-1.5-pro", "sk-1"); err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	model := got["model"].(map[string]any)
+	if model["name"] != "gemini-1.5-pro" {
+		t.Errorf("model.name = %v", model["name"])
+	}
+	// No endpoint/api_key keys should appear anywhere.
+	if strings.Contains(string(raw), "api.test") {
+		t.Errorf("endpoint leaked into Gemini settings:\n%s", raw)
+	}
+	if strings.Contains(string(raw), "sk-1") {
+		t.Errorf("api key leaked into Gemini settings:\n%s", raw)
+	}
+}
+
+func TestPerTool_Goose_ProviderAndModelOnly_YAML(t *testing.T) {
+	tool, path := loadToolFromRegistry(t, "goose", "config.yaml")
+	ep := providers.Endpoint{Endpoint: "https://api.test"}
+	if _, err := WriteConfig(tool, ep, "myprov", "gpt-4o", "sk-1"); err != nil {
+		t.Fatalf("WriteConfig: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	var got map[string]any
+	if err := yaml.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	if got["GOOSE_PROVIDER"] != "myprov" {
+		t.Errorf("GOOSE_PROVIDER = %v", got["GOOSE_PROVIDER"])
+	}
+	if got["GOOSE_MODEL"] != "gpt-4o" {
+		t.Errorf("GOOSE_MODEL = %v", got["GOOSE_MODEL"])
+	}
+	// No endpoint/api_key keys should appear.
+	if strings.Contains(string(raw), "api.test") {
+		t.Errorf("endpoint leaked into Goose config:\n%s", raw)
+	}
+	if strings.Contains(string(raw), "sk-1") {
+		t.Errorf("api key leaked into Goose config:\n%s", raw)
+	}
+}
