@@ -25,10 +25,18 @@ tools:
     cli_command: codex
     description: "OpenAI Codex CLI"
     env:
-      exported:
-        BASE_URL: "Populated from selected endpoint.endpoint."
-        OPENAI_API_KEY: "Resolved from endpoint configuration and environment (masked in output)."
+      managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.codex/config.toml
+      format: toml
+      upsert:
+        model_providers.{endpoint_name}.name: "{endpoint_name}"
+        model_providers.{endpoint_name}.base_url: "{endpoint}"
+        model_providers.{endpoint_name}.env_key: "OPENAI_API_KEY"
+        profiles.{selected_model}.model: "{selected_model}"
+        profiles.{selected_model}.model_provider: "{endpoint_name}"
+        profiles.{selected_model}.model_reasoning_effort: "low"
     configuration:
       required:
         endpoint: "Base URL for OpenAI-compatible API."
@@ -59,11 +67,15 @@ tools:
     cli_command: qwen
     description: "Qwen Code CLI"
     env:
-      exported:
-        OPENAI_BASE_URL: "Populated from selected endpoint.endpoint."
-        OPENAI_API_KEY: "Resolved from endpoint configuration and environment (masked in output)."
-        OPENAI_MODEL: "Model ID selected via code-agent-manager prompt."
+      managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.qwen/settings.json
+      format: json
+      upsert:
+        env.OPENAI_BASE_URL: "{endpoint}"
+        env.OPENAI_API_KEY: "{api_key}"
+        env.OPENAI_MODEL: "{selected_model}"
     configuration:
       required:
         endpoint: "Base URL for OpenAI-compatible API."
@@ -87,18 +99,21 @@ tools:
     cli_command: claude
     description: "Claude Code CLI"
     env:
-      exported:
-        ANTHROPIC_BASE_URL: "Populated from selected endpoint.endpoint."
-        ANTHROPIC_AUTH_TOKEN: "Resolved API key for the endpoint."
-        ANTHROPIC_MODEL: "Primary model selected via code-agent-manager prompt."
-        ANTHROPIC_SMALL_FAST_MODEL: "Secondary model selected via code-agent-manager prompt."
-        CLAUDE_MODEL_2: "Alias for the secondary model."
-        CLAUDE_MODELS: "Comma-separated primary and secondary models."
-        ANTHROPIC_DEFAULT_SONNET_MODEL: "Defaulted to the primary model."
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: "Defaulted to the primary model."
-        DISABLE_NON_ESSENTIAL_MODEL_CALLS: "1"
-        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.claude/settings.json
+      format: json
+      upsert:
+        env.ANTHROPIC_BASE_URL: "{endpoint}"
+        env.ANTHROPIC_AUTH_TOKEN: "{api_key}"
+        env.CLAUDE_CODE_OAUTH_TOKEN: "{api_key}"
+        env.ANTHROPIC_MODEL: "{selected_model}"
+        env.ANTHROPIC_SMALL_FAST_MODEL: "{model_2}"
+        env.ANTHROPIC_DEFAULT_SONNET_MODEL: "{selected_model}"
+        env.ANTHROPIC_DEFAULT_HAIKU_MODEL: "{selected_model}"
+        env.DISABLE_NON_ESSENTIAL_MODEL_CALLS: "1"
+        env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
     configuration:
       required:
         endpoint: "Base URL for the Anthropic-compatible API."
@@ -157,10 +172,14 @@ tools:
     cli_command: codebuddy
     description: "Tencent CodeBuddy CLI"
     env:
-      exported:
-        CODEBUDDY_BASE_URL: "Populated from selected endpoint.endpoint."
-        CODEBUDDY_API_KEY: "Resolved API key for the endpoint."
+      managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.codebuddy.json
+      format: json
+      upsert:
+        env.CODEBUDDY_BASE_URL: "{endpoint}"
+        env.CODEBUDDY_API_KEY: "{api_key}"
     configuration:
       required:
         endpoint: "Base URL for Tencent CodeBuddy API."
@@ -185,7 +204,7 @@ tools:
     cli_command: droid
     description: "Factory.ai Droid CLI"
     env:
-      exported:
+      managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
       removed:
         - http_proxy
@@ -196,6 +215,16 @@ tools:
         - NO_PROXY
         - all_proxy
         - ALL_PROXY
+    config_target:
+      path: ~/.factory/settings.json
+      format: json
+      upsert:
+        customModels[displayName={endpoint_name}/{selected_model}].displayName: "{endpoint_name}/{selected_model}"
+        customModels[displayName={endpoint_name}/{selected_model}].model: "{selected_model}"
+        customModels[displayName={endpoint_name}/{selected_model}].baseUrl: "{endpoint}"
+        customModels[displayName={endpoint_name}/{selected_model}].apiKey: "{api_key}"
+        customModels[displayName={endpoint_name}/{selected_model}].provider: "openai"
+        customModels[displayName={endpoint_name}/{selected_model}].maxOutputTokens: "8192"
     configuration:
       required:
         endpoint: "Base URL for each supported endpoint (multiple selections allowed)."
@@ -222,11 +251,15 @@ tools:
     cli_command: iflow
     description: "iFlow CLI"
     env:
-      exported:
-        IFLOW_API_KEY: "Resolved from selected endpoint actual_api_key."
-        IFLOW_BASE_URL: "Populated from selected endpoint.endpoint."
-        IFLOW_MODEL_NAME: "Model selected via code-agent-manager prompt."
+      managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.iflow/settings.json
+      format: json
+      upsert:
+        env.IFLOW_BASE_URL: "{endpoint}"
+        env.IFLOW_API_KEY: "{api_key}"
+        env.IFLOW_MODEL_NAME: "{selected_model}"
     configuration:
       required:
         endpoint: "Base URL for iFlow-compatible API."
@@ -262,8 +295,16 @@ tools:
     cli_command: neovate
     description: "Neovate Code CLI - to be implemented"
     env:
-      exported:
+      managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.neovate/config.json
+      format: json
+      upsert:
+        providers.{endpoint_name}.baseURL: "{endpoint}"
+        providers.{endpoint_name}.apiKey: "{api_key}"
+        providers.{endpoint_name}.model: "{selected_model}"
+        defaultProvider: "{endpoint_name}"
     configuration:
       required:
         endpoint: "Base URL for Neovate-compatible API."
@@ -384,8 +425,16 @@ tools:
     cli_command: kimi
     description: "Moonshot AI Kimi CLI"
     env:
-      exported:
+      managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.kimi/config.toml
+      format: toml
+      upsert:
+        provider: "{endpoint_name}"
+        providers.{endpoint_name}.base_url: "{endpoint}"
+        providers.{endpoint_name}.api_key: "{api_key}"
+        providers.{endpoint_name}.model: "{selected_model}"
     configuration:
       required:
         endpoint: "Base URL for Moonshot AI Kimi API."
@@ -412,11 +461,16 @@ tools:
     cli_command: aichat
     description: "AIChat - AI-powered chat CLI with multiple LLM support"
     env:
-      exported:
-        AICHAT_BASE_URL: "Populated from selected endpoint.endpoint."
-        AICHAT_API_KEY: "Resolved from endpoint configuration and environment (masked in output)."
-        AICHAT_MODEL: "Model ID selected via code-agent-manager prompt."
+      managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.config/aichat/config.yaml
+      format: yaml
+      upsert:
+        clients.{endpoint_name}.type: "openai-compatible"
+        clients.{endpoint_name}.api_base: "{endpoint}"
+        clients.{endpoint_name}.api_key: "{api_key}"
+        clients.{endpoint_name}.models[+].name: "{selected_model}"
     configuration:
       required:
         endpoint: "Base URL for OpenAI-compatible API."
