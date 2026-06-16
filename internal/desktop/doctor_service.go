@@ -1,0 +1,66 @@
+package desktop
+
+import (
+	"context"
+
+	"github.com/chat2anyllm/code-agent-manager/internal/doctor"
+	"github.com/chat2anyllm/code-agent-manager/internal/providers"
+)
+
+type DoctorService struct {
+	version       string
+	providersPath string
+}
+
+func NewDoctorService(version, providersPath string) *DoctorService {
+	return &DoctorService{version: version, providersPath: providersPath}
+}
+
+func (s *DoctorService) ListChecks() []string {
+	return doctor.SortedNames(s.checks())
+}
+
+func (s *DoctorService) RunChecks(ctx context.Context) ([]DoctorCheckDTO, error) {
+	checks := s.checks()
+	out := make([]DoctorCheckDTO, 0, len(checks))
+	for _, check := range checks {
+		reporter := &collectingReporter{}
+		res := check.Run(ctx, reporter)
+		out = append(out, DoctorCheckDTO{Name: check.Name(), Issues: res.Issues, Messages: reporter.messages})
+	}
+	return out, nil
+}
+
+func (s *DoctorService) checks() []doctor.Check {
+	file, _ := providers.Load(s.providersPath)
+	return []doctor.Check{
+		doctor.InstallationCheck{Version: s.version},
+		doctor.ConfigCheck{Path: s.providersPath},
+		doctor.EnvCheck{},
+		doctor.EndpointFormatCheck{File: file},
+		doctor.CacheCheck{},
+		doctor.GeminiAuthCheck{},
+		doctor.CopilotAuthCheck{},
+		doctor.ToolsAvailableCheck{},
+	}
+}
+
+type collectingReporter struct {
+	messages []DoctorMessageDTO
+}
+
+func (r *collectingReporter) Header(text string) {
+	r.messages = append(r.messages, DoctorMessageDTO{Level: "header", Text: text})
+}
+func (r *collectingReporter) Info(text string) {
+	r.messages = append(r.messages, DoctorMessageDTO{Level: "info", Text: text})
+}
+func (r *collectingReporter) Pass(text string) {
+	r.messages = append(r.messages, DoctorMessageDTO{Level: "pass", Text: text})
+}
+func (r *collectingReporter) Warn(text, hint string) {
+	r.messages = append(r.messages, DoctorMessageDTO{Level: "warn", Text: text, Hint: hint})
+}
+func (r *collectingReporter) Fail(text, hint string) {
+	r.messages = append(r.messages, DoctorMessageDTO{Level: "fail", Text: text, Hint: hint})
+}

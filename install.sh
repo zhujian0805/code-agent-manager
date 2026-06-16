@@ -16,7 +16,10 @@ print_header() { echo -e "${BLUE}=== $1 ===${NC}"; }
 
 INSTALL_DIR=${INSTALL_DIR:-"$HOME/.local/bin"}
 CONFIG_DIR=${CAM_CONFIG_DIR:-"$HOME/.config/code-agent-manager"}
+DESKTOP_ENTRY_DIR=${XDG_DATA_HOME:-"$HOME/.local/share"}/applications
+DESKTOP_ICON_DIR=${XDG_DATA_HOME:-"$HOME/.local/share"}/icons/hicolor/256x256/apps
 VERSION=${VERSION:-dev}
+INSTALL_DESKTOP=0
 
 check_go() {
     if ! command -v go >/dev/null 2>&1; then
@@ -35,6 +38,21 @@ build_binaries() {
     print_success "Built dist/cam and dist/code-agent-manager"
 }
 
+build_desktop() {
+    print_header "Building desktop binary"
+    mkdir -p dist
+    if command -v wails3 >/dev/null 2>&1 && [ -f wails.json ]; then
+        wails3 build
+        if [ -f bin/cam-desktop ]; then
+            cp bin/cam-desktop dist/cam-desktop
+        fi
+    fi
+    if [ ! -f dist/cam-desktop ]; then
+        go build -ldflags "-X main.version=$VERSION" -o dist/cam-desktop ./cmd/cam-desktop
+    fi
+    print_success "Built dist/cam-desktop"
+}
+
 install_binaries() {
     print_header "Installing CAM"
     mkdir -p "$INSTALL_DIR"
@@ -47,6 +65,30 @@ install_binaries() {
         *":$INSTALL_DIR:"*) ;;
         *) print_warning "$INSTALL_DIR is not in PATH" ;;
     esac
+}
+
+install_desktop() {
+    print_header "Installing CAM desktop"
+    mkdir -p "$INSTALL_DIR" "$DESKTOP_ENTRY_DIR" "$DESKTOP_ICON_DIR"
+    cp dist/cam-desktop "$INSTALL_DIR/cam-desktop"
+    chmod 755 "$INSTALL_DIR/cam-desktop"
+
+    if [ -f build/appicon.png ]; then
+        cp build/appicon.png "$DESKTOP_ICON_DIR/cam-desktop.png"
+    fi
+
+    cat > "$DESKTOP_ENTRY_DIR/cam-desktop.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Code Agent Manager
+Comment=Desktop UI for code-agent-manager
+Exec=$INSTALL_DIR/cam-desktop
+Icon=cam-desktop
+Terminal=false
+Categories=Development;Utility;
+EOF
+    chmod 644 "$DESKTOP_ENTRY_DIR/cam-desktop.desktop"
+    print_success "Installed cam-desktop to $INSTALL_DIR and desktop entry to $DESKTOP_ENTRY_DIR"
 }
 
 setup_config() {
@@ -99,18 +141,38 @@ verify_install() {
         print_error "code-agent-manager not found"
         exit 1
     fi
+
+    if [ "$INSTALL_DESKTOP" -eq 1 ]; then
+        if [ -x "$INSTALL_DIR/cam-desktop" ]; then
+            print_success "cam-desktop installed at $INSTALL_DIR/cam-desktop"
+            "$INSTALL_DIR/cam-desktop" --services >/dev/null || true
+        else
+            print_error "cam-desktop not found"
+            exit 1
+        fi
+    fi
 }
 
 uninstall_package() {
     print_header "Uninstalling CAM binaries"
     local removed=0
-    for binary in cam code-agent-manager; do
+    for binary in cam code-agent-manager cam-desktop; do
         if [ -f "$INSTALL_DIR/$binary" ]; then
             rm -f "$INSTALL_DIR/$binary"
             print_success "Removed $INSTALL_DIR/$binary"
             removed=1
         fi
     done
+    if [ -f "$DESKTOP_ENTRY_DIR/cam-desktop.desktop" ]; then
+        rm -f "$DESKTOP_ENTRY_DIR/cam-desktop.desktop"
+        print_success "Removed $DESKTOP_ENTRY_DIR/cam-desktop.desktop"
+        removed=1
+    fi
+    if [ -f "$DESKTOP_ICON_DIR/cam-desktop.png" ]; then
+        rm -f "$DESKTOP_ICON_DIR/cam-desktop.png"
+        print_success "Removed $DESKTOP_ICON_DIR/cam-desktop.png"
+        removed=1
+    fi
     if [ "$removed" -eq 0 ]; then
         print_warning "No CAM binaries found in $INSTALL_DIR"
     fi
@@ -130,7 +192,7 @@ show_usage() {
     cat <<EOF
 Code Agent Manager Installer
 
-Usage: $0 [METHOD]
+Usage: $0 [METHOD] [--desktop]
 
 Methods:
     install          Build and install Go binaries (default)
@@ -142,6 +204,9 @@ Methods:
     uninstall-purge  Remove installed binaries and CAM config directory
     help             Show this help
 
+Options:
+    --desktop        Also build/install/verify dist/cam-desktop and Linux desktop entry
+
 Environment:
     INSTALL_DIR      Destination directory (default: ~/.local/bin)
     CAM_CONFIG_DIR   Config directory (default: ~/.config/code-agent-manager)
@@ -151,20 +216,44 @@ EOF
 }
 
 main() {
-    local method=${1:-install}
+    local method=install
+    for arg in "$@"; do
+        case "$arg" in
+            --desktop)
+                INSTALL_DESKTOP=1
+                ;;
+            install|source|pypi|build|verify|uninstall|uninstall-purge|help|--help|-h)
+                method="$arg"
+                ;;
+            *)
+                print_error "Unknown argument: $arg"
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
     print_header "Code Agent Manager Go Installer"
 
     case "$method" in
         install|source|pypi)
             check_go
             build_binaries
+            if [ "$INSTALL_DESKTOP" -eq 1 ]; then
+                build_desktop
+            fi
             install_binaries
+            if [ "$INSTALL_DESKTOP" -eq 1 ]; then
+                install_desktop
+            fi
             setup_config
             verify_install
             ;;
         build)
             check_go
             build_binaries
+            if [ "$INSTALL_DESKTOP" -eq 1 ]; then
+                build_desktop
+            fi
             ;;
         verify)
             verify_install
