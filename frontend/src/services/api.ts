@@ -1,78 +1,88 @@
 import { mockConfigFiles, mockDoctorChecks, mockEntities, mockMCPClients, mockMCPServers, mockProviders, mockTools } from './mockData'
 import type { ConfigFile, DoctorCheck, Entity, LaunchPlan, MCPClient, MCPServer, Provider, Tool } from './types'
 
-type WailsAPI = {
-  App?: { Version?: () => Promise<string>; Platform?: () => Promise<string> }
-  AppService?: { Version?: () => Promise<string>; Platform?: () => Promise<string> }
-  Providers?: {
-    List?: () => Promise<Provider[]>
-    Add?: (input: Partial<Provider> & { name: string }) => Promise<Provider>
-    Enable?: (name: string) => Promise<Provider>
-    Disable?: (name: string) => Promise<Provider>
-    Remove?: (name: string) => Promise<unknown>
-  }
-  ProviderService?: WailsAPI['Providers']
-  Tools?: { List?: () => Promise<Tool[]> }
-  ToolService?: WailsAPI['Tools']
-  MCP?: { ListClients?: () => Promise<MCPClient[]>; ListInstalled?: (client: string, scope: string) => Promise<MCPServer[]> }
-  MCPService?: WailsAPI['MCP']
-  Entities?: { List?: (kind: string) => Promise<Entity[]>; Search?: (kind: string, query: string) => Promise<Entity[]> }
-  EntityService?: WailsAPI['Entities']
-  Config?: { ListFiles?: () => Promise<ConfigFile[]> }
-  ConfigService?: WailsAPI['Config']
-  Doctor?: { RunChecks?: () => Promise<DoctorCheck[]> }
-  DoctorService?: WailsAPI['Doctor']
-  Launch?: { DryRun?: (tool: string, provider: string, model: string, args: string[]) => Promise<LaunchPlan> }
-  LaunchService?: WailsAPI['Launch']
+type SidecarConfig = {
+  baseUrl: string
+  token?: string
 }
 
 declare global {
-  interface Window { go?: { desktop?: WailsAPI } }
+  interface Window { __CAM_SIDECAR__?: SidecarConfig; __TAURI_INTERNALS__?: unknown }
 }
 
-const wails = () => window.go?.desktop
-const service = <T>(shortName: keyof WailsAPI, structName: keyof WailsAPI): T | undefined => {
-  const bindings = wails()
-  return (bindings?.[shortName] ?? bindings?.[structName]) as T | undefined
+let tauriSidecar: Promise<SidecarConfig | undefined> | undefined
+
+const configuredSidecar = (): SidecarConfig | undefined => {
+  if (typeof window !== 'undefined' && window.__CAM_SIDECAR__?.baseUrl) {
+    return window.__CAM_SIDECAR__
+  }
+  const baseUrl = import.meta.env.VITE_CAM_API_BASE_URL
+  const token = import.meta.env.VITE_CAM_API_TOKEN
+  return baseUrl ? { baseUrl, token } : undefined
+}
+
+const sidecar = async (): Promise<SidecarConfig | undefined> => {
+  const configured = configuredSidecar()
+  if (configured) return configured
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return undefined
+  tauriSidecar ??= import('@tauri-apps/api/core')
+    .then(({ invoke }) => invoke<SidecarConfig>('sidecar_config'))
+    .then((config) => {
+      window.__CAM_SIDECAR__ = config
+      return config
+    })
+    .catch(() => undefined)
+  return tauriSidecar
+}
+
+const normalizeBaseUrl = (baseUrl: string) => baseUrl.replace(/\/$/, '')
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T | undefined> {
+  const config = await sidecar()
+  if (!config) return undefined
+  const headers = new Headers(init.headers)
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  if (config.token) headers.set('Authorization', `Bearer ${config.token}`)
+  const response = await fetch(`${normalizeBaseUrl(config.baseUrl)}${path}`, { ...init, headers })
+  if (!response.ok) throw new Error(await response.text())
+  return response.json() as Promise<T>
 }
 
 export const api = {
   async listTools(): Promise<Tool[]> {
-    return service<WailsAPI['Tools']>('Tools', 'ToolService')?.List?.() ?? mockTools
+    return (await request<Tool[]>('/api/tools')) ?? mockTools
   },
   async listProviders(): Promise<Provider[]> {
-    return service<WailsAPI['Providers']>('Providers', 'ProviderService')?.List?.() ?? mockProviders
+    return (await request<Provider[]>('/api/providers')) ?? mockProviders
   },
   async addProvider(input: Partial<Provider> & { name: string }): Promise<Provider> {
-    return service<WailsAPI['Providers']>('Providers', 'ProviderService')?.Add?.(input) ?? { ...mockProviders[0], ...input, clients: input.clients ?? [], models: input.models ?? [], enabled: input.enabled ?? true, endpoint: input.endpoint ?? '', apiKeyEnv: input.apiKeyEnv ?? '', supportedClient: input.supportedClient ?? '', keepProxyConfig: input.keepProxyConfig ?? false, useProxy: input.useProxy ?? false, description: input.description ?? '' }
+    return (await request<Provider>('/api/providers', { method: 'POST', body: JSON.stringify(input) })) ?? { ...mockProviders[0], ...input, clients: input.clients ?? [], models: input.models ?? [], enabled: input.enabled ?? true, endpoint: input.endpoint ?? '', apiKeyEnv: input.apiKeyEnv ?? '', supportedClient: input.supportedClient ?? '', keepProxyConfig: input.keepProxyConfig ?? false, useProxy: input.useProxy ?? false, description: input.description ?? '' }
   },
   async toggleProvider(name: string, enabled: boolean): Promise<Provider> {
-    const providers = service<WailsAPI['Providers']>('Providers', 'ProviderService')
-    const binding = enabled ? providers?.Enable : providers?.Disable
-    return binding?.(name) ?? { ...mockProviders[0], name, enabled }
+    return (await request<Provider>(`/api/providers/${encodeURIComponent(name)}/${enabled ? 'enable' : 'disable'}`, { method: 'POST' })) ?? { ...mockProviders[0], name, enabled }
   },
   async removeProvider(name: string): Promise<void> {
-    await (service<WailsAPI['Providers']>('Providers', 'ProviderService')?.Remove?.(name) ?? Promise.resolve())
+    await (request<unknown>(`/api/providers/${encodeURIComponent(name)}`, { method: 'DELETE' }) ?? Promise.resolve())
   },
   async listMCPClients(): Promise<MCPClient[]> {
-    return service<WailsAPI['MCP']>('MCP', 'MCPService')?.ListClients?.() ?? mockMCPClients
+    return (await request<MCPClient[]>('/api/mcp/clients')) ?? mockMCPClients
   },
   async listMCPServers(client = 'claude', scope = 'user'): Promise<MCPServer[]> {
-    return service<WailsAPI['MCP']>('MCP', 'MCPService')?.ListInstalled?.(client, scope) ?? mockMCPServers
+    return (await request<MCPServer[]>(`/api/mcp/servers?client=${encodeURIComponent(client)}&scope=${encodeURIComponent(scope)}`)) ?? mockMCPServers
   },
   async listEntities(kind: Entity['kind']): Promise<Entity[]> {
-    return service<WailsAPI['Entities']>('Entities', 'EntityService')?.List?.(kind) ?? mockEntities.filter((entity) => entity.kind === kind)
+    return (await request<Entity[]>(`/api/entities?kind=${encodeURIComponent(kind)}`)) ?? mockEntities.filter((entity) => entity.kind === kind)
   },
   async searchEntities(kind: Entity['kind'], query: string): Promise<Entity[]> {
-    return service<WailsAPI['Entities']>('Entities', 'EntityService')?.Search?.(kind, query) ?? mockEntities.filter((entity) => entity.kind === kind && `${entity.name} ${entity.description}`.toLowerCase().includes(query.toLowerCase()))
+    return (await request<Entity[]>(`/api/entities?kind=${encodeURIComponent(kind)}&query=${encodeURIComponent(query)}`)) ?? mockEntities.filter((entity) => entity.kind === kind && `${entity.name} ${entity.description}`.toLowerCase().includes(query.toLowerCase()))
   },
   async listConfigFiles(): Promise<ConfigFile[]> {
-    return service<WailsAPI['Config']>('Config', 'ConfigService')?.ListFiles?.() ?? mockConfigFiles
+    return (await request<ConfigFile[]>('/api/config/files')) ?? mockConfigFiles
   },
   async runDoctor(): Promise<DoctorCheck[]> {
-    return service<WailsAPI['Doctor']>('Doctor', 'DoctorService')?.RunChecks?.() ?? mockDoctorChecks
+    return (await request<DoctorCheck[]>('/api/doctor/checks')) ?? mockDoctorChecks
   },
   async dryRun(tool: string, provider: string, model: string): Promise<LaunchPlan> {
-    return service<WailsAPI['Launch']>('Launch', 'LaunchService')?.DryRun?.(tool, provider, model, []) ?? { tool: mockTools[0], provider: mockProviders[0], model, command: tool, args: ['--model', model], environment: { CAM_PROVIDER: provider } }
+    return (await request<LaunchPlan>('/api/launch/dry-run', { method: 'POST', body: JSON.stringify({ tool, provider, model, args: [] }) })) ?? { tool: mockTools[0], provider: mockProviders[0], model, command: tool, args: ['--model', model], environment: { CAM_PROVIDER: provider } }
   },
 }

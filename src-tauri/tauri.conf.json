@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Code Agent Manager",
+  "version": "0.1.0",
+  "identifier": "com.chat2anyllm.code-agent-manager",
+  "build": {
+    "beforeDevCommand": "npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort",
+    "beforeBuildCommand": "npm --prefix frontend run build && go build -o src-tauri/binaries/cam-sidecar-x86_64-pc-windows-msvc.exe ./cmd/cam-sidecar",
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Code Agent Manager",
+        "width": 1180,
+        "height": 780,
+        "minWidth": 960,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "externalBin": ["binaries/cam-sidecar"],
+    "resources": []
+  }
+}

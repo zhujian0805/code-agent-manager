@@ -3,13 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/chat2anyllm/code-agent-manager/internal/desktop"
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
 var version = "dev"
@@ -29,35 +25,7 @@ func main() {
 		}
 	}
 
-	if err := runDesktopApp(services); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func runDesktopApp(services desktop.Services) error {
-	assets, err := desktopAssets()
-	if err != nil {
-		return fmt.Errorf("load desktop assets: %w", err)
-	}
-
-	return wails.Run(&options.App{
-		Title:     "Code Agent Manager",
-		Width:     1180,
-		Height:    780,
-		MinWidth:  960,
-		MinHeight: 640,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		Bind: []interface{}{
-			services.App,
-			services.Providers,
-			services.MCP,
-			services.Entities,
-			services.Tools,
-			services.Doctor,
-			services.Config,
-			services.Launch,
-		},
-	})
+	fmt.Fprintln(os.Stderr, "cam-desktop Wails runtime has been replaced by the Tauri desktop shell.")
+	fmt.Fprintln(os.Stderr, "Use `cargo tauri dev --manifest-path src-tauri/Cargo.toml` for the desktop app or `cam-sidecar` for the Go sidecar.")
+	os.Exit(1)
 }

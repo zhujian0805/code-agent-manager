@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from './api'
 
-const resetWails = () => {
-  delete window.go
+const resetSidecar = () => {
+  delete window.__CAM_SIDECAR__
+  vi.restoreAllMocks()
 }
 
 describe('api mock fallback', () => {
-  afterEach(resetWails)
+  afterEach(resetSidecar)
 
   it('lists tools and providers', async () => {
     await expect(api.listTools()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ command: 'claude' })]))
@@ -21,32 +22,32 @@ describe('api mock fallback', () => {
   })
 })
 
-describe('api Wails bindings', () => {
-  afterEach(resetWails)
+describe('api sidecar transport', () => {
+  afterEach(resetSidecar)
 
-  it('uses short service aliases when Wails bindings exist', async () => {
-    const tools = [{ name: 'claude-code', command: 'claude', description: 'Claude Code', enabled: true, installed: true }]
-    const providers = [{ name: 'anthropic', endpoint: 'https://api.anthropic.com', apiKeyEnv: 'ANTHROPIC_API_KEY', supportedClient: 'claude', clients: ['claude'], models: ['claude-opus-4-8'], keepProxyConfig: false, useProxy: false, enabled: true }]
-    const listTools = vi.fn().mockResolvedValue(tools)
-    const listProviders = vi.fn().mockResolvedValue(providers)
-    window.go = { desktop: { Tools: { List: listTools }, Providers: { List: listProviders } } }
+  it('uses sidecar base URL and bearer token for provider listing', async () => {
+    const providers = [{ name: 'local', endpoint: 'http://localhost:4000/v1', apiKeyEnv: 'LOCAL_KEY', supportedClient: 'claude', clients: ['claude'], models: ['m1'], keepProxyConfig: false, useProxy: false, enabled: true, description: 'local' }]
+    window.__CAM_SIDECAR__ = { baseUrl: 'http://127.0.0.1:54321/', token: 'secret' }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(providers), { status: 200, headers: { 'Content-Type': 'application/json' } }))
 
-    await expect(api.listTools()).resolves.toBe(tools)
-    await expect(api.listProviders()).resolves.toBe(providers)
-    expect(listTools).toHaveBeenCalledOnce()
-    expect(listProviders).toHaveBeenCalledOnce()
+    await expect(api.listProviders()).resolves.toEqual(providers)
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://127.0.0.1:54321/api/providers')
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer secret')
   })
 
-  it('uses Wails struct service names when generated bindings include them', async () => {
-    const tools = [{ name: 'codex', command: 'codex', description: 'Codex', enabled: true, installed: false }]
-    const providers = [{ name: 'local', endpoint: 'http://localhost:4000/v1', apiKeyEnv: 'LOCAL_KEY', supportedClient: 'codex', clients: ['codex'], models: ['gpt-4.1'], keepProxyConfig: false, useProxy: false, enabled: true }]
-    const listTools = vi.fn().mockResolvedValue(tools)
-    const listProviders = vi.fn().mockResolvedValue(providers)
-    window.go = { desktop: { ToolService: { List: listTools }, ProviderService: { List: listProviders } } }
+  it('posts provider input to sidecar', async () => {
+    const provider = { name: 'alpha', endpoint: 'https://alpha.example', apiKeyEnv: '', supportedClient: 'claude', clients: ['claude'], models: [], keepProxyConfig: false, useProxy: false, enabled: true, description: '' }
+    window.__CAM_SIDECAR__ = { baseUrl: 'http://127.0.0.1:54321' }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(provider), { status: 200, headers: { 'Content-Type': 'application/json' } }))
 
-    await expect(api.listTools()).resolves.toBe(tools)
-    await expect(api.listProviders()).resolves.toBe(providers)
-    expect(listTools).toHaveBeenCalledOnce()
-    expect(listProviders).toHaveBeenCalledOnce()
+    await expect(api.addProvider({ name: 'alpha', endpoint: 'https://alpha.example' })).resolves.toEqual(provider)
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init?.method).toBe('POST')
+    expect(init?.body).toContain('alpha')
+    expect(new Headers(init?.headers).get('Content-Type')).toBe('application/json')
   })
 })

@@ -39,27 +39,15 @@ build_binaries() {
 }
 
 build_desktop() {
-    print_header "Building desktop binary"
-    mkdir -p dist
-    if command -v wails >/dev/null 2>&1 && [ -f wails.json ]; then
-        wails build
-        if [ -f build/bin/cam-desktop ]; then
-            cp build/bin/cam-desktop dist/cam-desktop
-        elif [ -f build/bin/cam-desktop.exe ]; then
-            cp build/bin/cam-desktop.exe dist/cam-desktop.exe
-        fi
-    elif command -v wails3 >/dev/null 2>&1 && [ -f wails.json ]; then
-        wails3 build
-        if [ -f bin/cam-desktop ]; then
-            cp bin/cam-desktop dist/cam-desktop
-        elif [ -f bin/cam-desktop.exe ]; then
-            cp bin/cam-desktop.exe dist/cam-desktop.exe
-        fi
+    print_header "Building Tauri desktop and Go sidecar"
+    mkdir -p dist src-tauri/binaries
+    npm --prefix frontend run build
+    go build -ldflags "-X main.version=$VERSION" -o src-tauri/binaries/cam-sidecar ./cmd/cam-sidecar
+    cp src-tauri/binaries/cam-sidecar dist/cam-sidecar 2>/dev/null || cp src-tauri/binaries/cam-sidecar.exe dist/cam-sidecar.exe
+    if command -v cargo >/dev/null 2>&1 && [ -f src-tauri/Cargo.toml ]; then
+        cargo tauri build --manifest-path src-tauri/Cargo.toml || print_warning "cargo tauri build failed; sidecar fallback is still available"
     fi
-    if [ ! -f dist/cam-desktop ] && [ ! -f dist/cam-desktop.exe ]; then
-        go build -ldflags "-X main.version=$VERSION" -o dist/cam-desktop ./cmd/cam-desktop
-    fi
-    print_success "Built dist/cam-desktop"
+    print_success "Built Go sidecar and attempted Tauri desktop build"
 }
 
 install_binaries() {
@@ -77,15 +65,15 @@ install_binaries() {
 }
 
 install_desktop() {
-    print_header "Installing CAM desktop"
+    print_header "Installing CAM sidecar"
     mkdir -p "$INSTALL_DIR"
-    local desktop_bin=cam-desktop
-    if [ -f dist/cam-desktop.exe ]; then
-        desktop_bin=cam-desktop.exe
+    local sidecar_bin=cam-sidecar
+    if [ -f dist/cam-sidecar.exe ]; then
+        sidecar_bin=cam-sidecar.exe
     fi
-    cp "dist/$desktop_bin" "$INSTALL_DIR/$desktop_bin"
-    chmod 755 "$INSTALL_DIR/$desktop_bin"
-    print_success "Installed $desktop_bin to $INSTALL_DIR"
+    cp "dist/$sidecar_bin" "$INSTALL_DIR/$sidecar_bin"
+    chmod 755 "$INSTALL_DIR/$sidecar_bin"
+    print_success "Installed $sidecar_bin to $INSTALL_DIR"
 
     if [ "$(uname -s)" != "Linux" ]; then
         return
@@ -101,13 +89,13 @@ install_desktop() {
 Type=Application
 Name=Code Agent Manager
 Comment=Desktop UI for code-agent-manager
-Exec=$INSTALL_DIR/$desktop_bin
+Exec=$INSTALL_DIR/$sidecar_bin
 Icon=cam-desktop
 Terminal=false
 Categories=Development;Utility;
 EOF
     chmod 644 "$DESKTOP_ENTRY_DIR/cam-desktop.desktop"
-    print_success "Installed desktop entry to $DESKTOP_ENTRY_DIR"
+    print_success "Installed sidecar desktop entry to $DESKTOP_ENTRY_DIR"
 }
 
 setup_config() {
@@ -162,11 +150,14 @@ verify_install() {
     fi
 
     if [ "$INSTALL_DESKTOP" -eq 1 ]; then
-        if [ -x "$INSTALL_DIR/cam-desktop" ]; then
-            print_success "cam-desktop installed at $INSTALL_DIR/cam-desktop"
-            "$INSTALL_DIR/cam-desktop" --services >/dev/null || true
+        if [ -x "$INSTALL_DIR/cam-sidecar" ]; then
+            print_success "cam-sidecar installed at $INSTALL_DIR/cam-sidecar"
+            "$INSTALL_DIR/cam-sidecar" --version-json >/dev/null || true
+        elif [ -x "$INSTALL_DIR/cam-sidecar.exe" ]; then
+            print_success "cam-sidecar.exe installed at $INSTALL_DIR/cam-sidecar.exe"
+            "$INSTALL_DIR/cam-sidecar.exe" --version-json >/dev/null || true
         else
-            print_error "cam-desktop not found"
+            print_error "cam-sidecar not found"
             exit 1
         fi
     fi
@@ -175,7 +166,7 @@ verify_install() {
 uninstall_package() {
     print_header "Uninstalling CAM binaries"
     local removed=0
-    for binary in cam code-agent-manager cam-desktop; do
+    for binary in cam code-agent-manager cam-desktop cam-sidecar cam-sidecar.exe; do
         if [ -f "$INSTALL_DIR/$binary" ]; then
             rm -f "$INSTALL_DIR/$binary"
             print_success "Removed $INSTALL_DIR/$binary"

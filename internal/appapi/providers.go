@@ -1,0 +1,304 @@
+package appapi
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/chat2anyllm/code-agent-manager/internal/pathutil"
+	"github.com/chat2anyllm/code-agent-manager/internal/providers"
+)
+
+// OperationResult describes a completed app operation.
+type OperationResult struct {
+	OK      bool
+	Message string
+	Path    string
+}
+
+// Provider is the shared provider shape consumed by CLI and desktop adapters.
+type Provider struct {
+	Name            string
+	Endpoint        string
+	APIKeyEnv       string
+	SupportedClient string
+	Clients         []string
+	Models          []string
+	KeepProxyConfig bool
+	UseProxy        bool
+	Enabled         bool
+	Description     string
+	ListModelsCmd   string
+	MaskedAPIKey    string
+}
+
+// ProviderInput creates a provider from complete user input.
+type ProviderInput struct {
+	Name            string
+	Endpoint        string
+	APIKeyEnv       string
+	SupportedClient string
+	Clients         []string
+	Models          []string
+	KeepProxyConfig bool
+	UseProxy        bool
+	Enabled         *bool
+	Description     string
+	ListModelsCmd   string
+}
+
+// ProviderPatch updates a provider without forcing callers to overwrite every field.
+type ProviderPatch struct {
+	Endpoint        *string
+	APIKeyEnv       *string
+	SupportedClient *string
+	Clients         *providers.ListPatch
+	Models          *providers.ListPatch
+	KeepProxyConfig *bool
+	UseProxy        *bool
+	Enabled         *bool
+	Description     *string
+	ListModelsCmd   *string
+}
+
+// ProviderAPI contains provider workflows shared by CLI and desktop adapters.
+type ProviderAPI struct {
+	ProvidersPath string
+	CacheTTL      time.Duration
+	Env           func(string) string
+}
+
+func (api ProviderAPI) path() string {
+	if api.ProvidersPath != "" {
+		return api.ProvidersPath
+	}
+	return providers.DefaultPath()
+}
+
+func (api ProviderAPI) getenv() func(string) string {
+	if api.Env != nil {
+		return api.Env
+	}
+	return os.Getenv
+}
+
+func (api ProviderAPI) cacheTTL() time.Duration {
+	if api.CacheTTL > 0 {
+		return api.CacheTTL
+	}
+	return time.Hour
+}
+
+// Init creates an empty providers file if it does not already exist.
+func (api ProviderAPI) Init(ctx context.Context) (OperationResult, error) {
+	_ = ctx
+	path := api.path()
+	file, created, err := providers.LoadOrInit(path)
+	if err != nil {
+		return OperationResult{}, err
+	}
+	if !created {
+		return OperationResult{OK: true, Message: fmt.Sprintf("providers.json already exists at %s", path), Path: path}, nil
+	}
+	if err := providers.Save(path, file); err != nil {
+		return OperationResult{}, err
+	}
+	return OperationResult{OK: true, Message: fmt.Sprintf("Created empty providers.json at %s", path), Path: path}, nil
+}
+
+// List returns all configured providers.
+func (api ProviderAPI) List(ctx context.Context) ([]Provider, error) {
+	_ = ctx
+	file, _, err := providers.LoadOrInit(api.path())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Provider, 0, len(file.Endpoints))
+	for _, name := range file.SortedNames() {
+		out = append(out, providerFromEndpoint(name, file.Endpoints[name], api.getenv()))
+	}
+	return out, nil
+}
+
+// Show returns one provider by name.
+func (api ProviderAPI) Show(ctx context.Context, name string) (Provider, error) {
+	_ = ctx
+	file, _, err := providers.LoadOrInit(api.path())
+	if err != nil {
+		return Provider{}, err
+	}
+	endpoint, ok := file.Endpoints[name]
+	if !ok {
+		return Provider{}, fmt.Errorf("provider %q not found: %w", name, providers.ErrNotFound)
+	}
+	return providerFromEndpoint(name, endpoint, api.getenv()), nil
+}
+
+// Add inserts a new provider.
+func (api ProviderAPI) Add(ctx context.Context, input ProviderInput) (Provider, error) {
+	_ = ctx
+	path := api.path()
+	file, _, err := providers.LoadOrInit(path)
+	if err != nil {
+		return Provider{}, err
+	}
+	endpoint := endpointFromInput(input)
+	if err := providers.Add(&file, input.Name, endpoint); err != nil {
+		return Provider{}, err
+	}
+	if err := providers.Save(path, file); err != nil {
+		return Provider{}, err
+	}
+	return providerFromEndpoint(input.Name, endpoint, api.getenv()), nil
+}
+
+// Update applies a sparse provider patch.
+func (api ProviderAPI) Update(ctx context.Context, name string, patch ProviderPatch) (Provider, error) {
+	_ = ctx
+	path := api.path()
+	file, _, err := providers.LoadOrInit(path)
+	if err != nil {
+		return Provider{}, err
+	}
+	providerPatch := providers.Patch{
+		Endpoint:        patch.Endpoint,
+		APIKeyEnv:       patch.APIKeyEnv,
+		Description:     patch.Description,
+		ListModelsCmd:   patch.ListModelsCmd,
+		KeepProxyConfig: patch.KeepProxyConfig,
+		UseProxy:        patch.UseProxy,
+		Enabled:         patch.Enabled,
+		Clients:         patch.Clients,
+		Models:          patch.Models,
+	}
+	if patch.SupportedClient != nil {
+		providerPatch.Clients = &providers.ListPatch{Op: providers.ListOpReplace, Items: splitClients(*patch.SupportedClient)}
+	}
+	if err := providers.Update(&file, name, providerPatch); err != nil {
+		return Provider{}, err
+	}
+	if err := providers.Save(path, file); err != nil {
+		return Provider{}, err
+	}
+	return providerFromEndpoint(name, file.Endpoints[name], api.getenv()), nil
+}
+
+// Remove deletes a provider.
+func (api ProviderAPI) Remove(ctx context.Context, name string) (OperationResult, error) {
+	_ = ctx
+	path := api.path()
+	file, _, err := providers.LoadOrInit(path)
+	if err != nil {
+		return OperationResult{}, err
+	}
+	if !providers.Remove(&file, name) {
+		return OperationResult{}, fmt.Errorf("provider %q not found: %w", name, providers.ErrNotFound)
+	}
+	if err := providers.Save(path, file); err != nil {
+		return OperationResult{}, err
+	}
+	return OperationResult{OK: true, Message: fmt.Sprintf("Removed provider %q", name), Path: path}, nil
+}
+
+// SetEnabled toggles a provider's enabled state.
+func (api ProviderAPI) SetEnabled(ctx context.Context, name string, enabled bool) (Provider, error) {
+	_ = ctx
+	path := api.path()
+	file, _, err := providers.LoadOrInit(path)
+	if err != nil {
+		return Provider{}, err
+	}
+	if err := providers.SetEnabled(&file, name, enabled); err != nil {
+		return Provider{}, err
+	}
+	if err := providers.Save(path, file); err != nil {
+		return Provider{}, err
+	}
+	return providerFromEndpoint(name, file.Endpoints[name], api.getenv()), nil
+}
+
+// Rename changes a provider key.
+func (api ProviderAPI) Rename(ctx context.Context, oldName, newName string) (Provider, error) {
+	_ = ctx
+	path := api.path()
+	file, _, err := providers.LoadOrInit(path)
+	if err != nil {
+		return Provider{}, err
+	}
+	if err := providers.Rename(&file, oldName, newName); err != nil {
+		return Provider{}, err
+	}
+	if err := providers.Save(path, file); err != nil {
+		return Provider{}, err
+	}
+	return providerFromEndpoint(newName, file.Endpoints[newName], api.getenv()), nil
+}
+
+// ResolveModels resolves static or dynamically discovered models for a provider.
+func (api ProviderAPI) ResolveModels(ctx context.Context, name string) ([]string, error) {
+	_ = ctx
+	file, _, err := providers.LoadOrInit(api.path())
+	if err != nil {
+		return nil, err
+	}
+	endpoint, ok := file.Endpoints[name]
+	if !ok {
+		return nil, fmt.Errorf("provider %q not found: %w", name, providers.ErrNotFound)
+	}
+	return providers.ResolveModels(endpoint, name, api.cacheTTL(), filepath.Join(pathutil.CacheDir(), "models"), api.getenv())
+}
+
+func providerFromEndpoint(name string, endpoint providers.Endpoint, getenv func(string) string) Provider {
+	return Provider{
+		Name:            name,
+		Endpoint:        endpoint.Endpoint,
+		APIKeyEnv:       endpoint.APIKeyEnv,
+		SupportedClient: endpoint.SupportedClient,
+		Clients:         endpoint.Clients(),
+		Models:          append([]string(nil), endpoint.Models...),
+		KeepProxyConfig: endpoint.KeepProxyConfig,
+		UseProxy:        endpoint.UseProxy,
+		Enabled:         endpoint.IsEnabled(),
+		Description:     endpoint.Description,
+		ListModelsCmd:   endpoint.ListModelsCmd,
+		MaskedAPIKey:    providers.MaskedAPIKey(providers.ResolveAPIKey(endpoint, getenv)),
+	}
+}
+
+func endpointFromInput(input ProviderInput) providers.Endpoint {
+	supportedClient := input.SupportedClient
+	if supportedClient == "" && len(input.Clients) > 0 {
+		supportedClient = joinClients(input.Clients)
+	}
+	endpoint := providers.Endpoint{
+		Endpoint:        input.Endpoint,
+		APIKeyEnv:       input.APIKeyEnv,
+		SupportedClient: supportedClient,
+		ListModelsCmd:   input.ListModelsCmd,
+		Models:          append([]string(nil), input.Models...),
+		KeepProxyConfig: input.KeepProxyConfig,
+		UseProxy:        input.UseProxy,
+		Description:     input.Description,
+	}
+	if input.Enabled != nil {
+		endpoint.Enabled = input.Enabled
+	}
+	return endpoint
+}
+
+func splitClients(raw string) []string {
+	return providers.Endpoint{SupportedClient: raw}.Clients()
+}
+
+func joinClients(clients []string) string {
+	parts := make([]string, 0, len(clients))
+	for _, client := range clients {
+		if trimmed := strings.TrimSpace(client); trimmed != "" {
+			parts = append(parts, trimmed)
+		}
+	}
+	return strings.Join(parts, ",")
+}

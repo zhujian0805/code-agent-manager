@@ -24,6 +24,9 @@ codebuddy_usage.md
 .gemini/
 goose*
 node_modules
-cmd/cam-desktop/webui/dist/
+frontend/dist/
+src-tauri/target/
+src-tauri/binaries/
 bin/
 *.syso
+src-tauri/gen/

@@ -1,11 +1,10 @@
 package desktop
 
 import (
-	"os"
-	"strings"
+	"context"
 	"sync"
-	"time"
 
+	"github.com/chat2anyllm/code-agent-manager/internal/appapi"
 	"github.com/chat2anyllm/code-agent-manager/internal/providers"
 )
 
@@ -16,6 +15,10 @@ type ProviderService struct {
 
 func NewProviderService(path string) *ProviderService {
 	return &ProviderService{path: path}
+}
+
+func (s *ProviderService) api() appapi.ProviderAPI {
+	return appapi.ProviderAPI{ProvidersPath: s.path}
 }
 
 func (s *ProviderService) providersPath() string {
@@ -29,105 +32,64 @@ func (s *ProviderService) Init() (OperationResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	file, created, err := providers.LoadOrInit(s.providersPath())
+	result, err := s.api().Init(context.Background())
 	if err != nil {
 		return OperationResult{}, wrapError("PROVIDER_INIT_FAILED", err)
 	}
-	if err := providers.Save(s.providersPath(), file); err != nil {
-		return OperationResult{}, wrapError("PROVIDER_SAVE_FAILED", err)
-	}
-	msg := "providers file ready"
-	if created {
-		msg = "providers file created"
-	}
-	return OperationResult{OK: true, Message: msg, Path: s.providersPath()}, nil
+	return operationResultDTO(result), nil
 }
 
 func (s *ProviderService) List() ([]ProviderDTO, error) {
-	file, err := providers.Load(s.providersPath())
+	listed, err := s.api().List(context.Background())
 	if err != nil {
 		return nil, wrapError("PROVIDER_LOAD_FAILED", err)
 	}
-	out := make([]ProviderDTO, 0, len(file.Endpoints))
-	for _, name := range file.SortedNames() {
-		out = append(out, providerDTO(name, file.Endpoints[name]))
+	out := make([]ProviderDTO, 0, len(listed))
+	for _, provider := range listed {
+		out = append(out, providerDTOFromAPI(provider))
 	}
 	return out, nil
 }
 
 func (s *ProviderService) Show(name string) (ProviderDTO, error) {
-	file, err := providers.Load(s.providersPath())
+	provider, err := s.api().Show(context.Background(), name)
 	if err != nil {
-		return ProviderDTO{}, wrapError("PROVIDER_LOAD_FAILED", err)
+		return ProviderDTO{}, wrapProviderError("PROVIDER_NOT_FOUND", err, name)
 	}
-	ep, ok := file.Endpoints[name]
-	if !ok {
-		return ProviderDTO{}, NewError("PROVIDER_NOT_FOUND", "provider not found", map[string]string{"name": name})
-	}
-	return providerDTO(name, ep), nil
+	return providerDTOFromAPI(provider), nil
 }
 
 func (s *ProviderService) Add(input ProviderInput) (ProviderDTO, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	file, _, err := providers.LoadOrInit(s.providersPath())
+	provider, err := s.api().Add(context.Background(), providerInputFromDTO(input))
 	if err != nil {
-		return ProviderDTO{}, wrapError("PROVIDER_LOAD_FAILED", err)
-	}
-	ep := endpointFromInput(input)
-	if err := providers.Add(&file, input.Name, ep); err != nil {
 		return ProviderDTO{}, wrapError("PROVIDER_ADD_FAILED", err)
 	}
-	if err := providers.Save(s.providersPath(), file); err != nil {
-		return ProviderDTO{}, wrapError("PROVIDER_SAVE_FAILED", err)
-	}
-	return providerDTO(input.Name, ep), nil
+	return providerDTOFromAPI(provider), nil
 }
 
 func (s *ProviderService) Update(name string, input ProviderInput) (ProviderDTO, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	file, _, err := providers.LoadOrInit(s.providersPath())
+	provider, err := s.api().Update(context.Background(), name, providerPatchFromDTO(input))
 	if err != nil {
-		return ProviderDTO{}, wrapError("PROVIDER_LOAD_FAILED", err)
-	}
-	patch := providers.Patch{
-		Endpoint:        strPtr(input.Endpoint),
-		APIKeyEnv:       strPtr(input.APIKeyEnv),
-		Description:     strPtr(input.Description),
-		ListModelsCmd:   strPtr(input.ListModelsCmd),
-		KeepProxyConfig: boolPtr(input.KeepProxyConfig),
-		UseProxy:        boolPtr(input.UseProxy),
-		Enabled:         input.Enabled,
-		Clients:         &providers.ListPatch{Op: providers.ListOpReplace, Items: clientsFromInput(input)},
-		Models:          &providers.ListPatch{Op: providers.ListOpReplace, Items: input.Models},
-	}
-	if err := providers.Update(&file, name, patch); err != nil {
 		return ProviderDTO{}, wrapError("PROVIDER_UPDATE_FAILED", err)
 	}
-	if err := providers.Save(s.providersPath(), file); err != nil {
-		return ProviderDTO{}, wrapError("PROVIDER_SAVE_FAILED", err)
-	}
-	return providerDTO(name, file.Endpoints[name]), nil
+	return providerDTOFromAPI(provider), nil
 }
 
 func (s *ProviderService) Remove(name string) (OperationResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	file, _, err := providers.LoadOrInit(s.providersPath())
+	result, err := s.api().Remove(context.Background(), name)
 	if err != nil {
-		return OperationResult{}, wrapError("PROVIDER_LOAD_FAILED", err)
+		return OperationResult{}, wrapProviderError("PROVIDER_NOT_FOUND", err, name)
 	}
-	if !providers.Remove(&file, name) {
-		return OperationResult{}, NewError("PROVIDER_NOT_FOUND", "provider not found", map[string]string{"name": name})
-	}
-	if err := providers.Save(s.providersPath(), file); err != nil {
-		return OperationResult{}, wrapError("PROVIDER_SAVE_FAILED", err)
-	}
-	return OperationResult{OK: true, Message: "provider removed", Path: s.providersPath()}, nil
+	return operationResultDTO(result), nil
 }
 
 func (s *ProviderService) Enable(name string) (ProviderDTO, error) {
@@ -142,29 +104,15 @@ func (s *ProviderService) Rename(oldName, newName string) (ProviderDTO, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	file, _, err := providers.LoadOrInit(s.providersPath())
+	provider, err := s.api().Rename(context.Background(), oldName, newName)
 	if err != nil {
-		return ProviderDTO{}, wrapError("PROVIDER_LOAD_FAILED", err)
-	}
-	if err := providers.Rename(&file, oldName, newName); err != nil {
 		return ProviderDTO{}, wrapError("PROVIDER_RENAME_FAILED", err)
 	}
-	if err := providers.Save(s.providersPath(), file); err != nil {
-		return ProviderDTO{}, wrapError("PROVIDER_SAVE_FAILED", err)
-	}
-	return providerDTO(newName, file.Endpoints[newName]), nil
+	return providerDTOFromAPI(provider), nil
 }
 
 func (s *ProviderService) ResolveModels(name string) ([]string, error) {
-	file, err := providers.Load(s.providersPath())
-	if err != nil {
-		return nil, wrapError("PROVIDER_LOAD_FAILED", err)
-	}
-	ep, ok := file.Endpoints[name]
-	if !ok {
-		return nil, NewError("PROVIDER_NOT_FOUND", "provider not found", map[string]string{"name": name})
-	}
-	models, err := providers.ResolveModels(ep, name, 24*time.Hour, "", os.Getenv)
+	models, err := s.api().ResolveModels(context.Background(), name)
 	if err != nil {
 		return nil, wrapError("MODEL_DISCOVERY_FAILED", err)
 	}
@@ -175,44 +123,59 @@ func (s *ProviderService) setEnabled(name string, enabled bool) (ProviderDTO, er
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	file, _, err := providers.LoadOrInit(s.providersPath())
+	provider, err := s.api().SetEnabled(context.Background(), name, enabled)
 	if err != nil {
-		return ProviderDTO{}, wrapError("PROVIDER_LOAD_FAILED", err)
-	}
-	if err := providers.SetEnabled(&file, name, enabled); err != nil {
 		return ProviderDTO{}, wrapError("PROVIDER_UPDATE_FAILED", err)
 	}
-	if err := providers.Save(s.providersPath(), file); err != nil {
-		return ProviderDTO{}, wrapError("PROVIDER_SAVE_FAILED", err)
-	}
-	return providerDTO(name, file.Endpoints[name]), nil
+	return providerDTOFromAPI(provider), nil
 }
 
-func providerDTO(name string, ep providers.Endpoint) ProviderDTO {
-	apiKey := providers.ResolveAPIKey(ep, os.Getenv)
+func operationResultDTO(result appapi.OperationResult) OperationResult {
+	return OperationResult{OK: result.OK, Message: result.Message, Path: result.Path}
+}
+
+func providerDTOFromAPI(provider appapi.Provider) ProviderDTO {
 	return ProviderDTO{
-		Name:            name,
-		Endpoint:        ep.Endpoint,
-		APIKeyEnv:       ep.APIKeyEnv,
-		SupportedClient: ep.SupportedClient,
-		Clients:         ep.Clients(),
-		Models:          append([]string(nil), ep.Models...),
-		KeepProxyConfig: ep.KeepProxyConfig,
-		UseProxy:        ep.UseProxy,
-		Enabled:         ep.IsEnabled(),
-		Description:     ep.Description,
-		MaskedAPIKey:    providers.MaskedAPIKey(apiKey),
+		Name:            provider.Name,
+		Endpoint:        provider.Endpoint,
+		APIKeyEnv:       provider.APIKeyEnv,
+		SupportedClient: provider.SupportedClient,
+		Clients:         provider.Clients,
+		Models:          provider.Models,
+		KeepProxyConfig: provider.KeepProxyConfig,
+		UseProxy:        provider.UseProxy,
+		Enabled:         provider.Enabled,
+		Description:     provider.Description,
+		MaskedAPIKey:    provider.MaskedAPIKey,
 	}
 }
 
-func endpointFromInput(input ProviderInput) providers.Endpoint {
-	clients := clientsFromInput(input)
-	return providers.Endpoint{
+func providerDTO(name string, endpoint providers.Endpoint) ProviderDTO {
+	return providerDTOFromAPI(appapi.Provider{
+		Name:            name,
+		Endpoint:        endpoint.Endpoint,
+		APIKeyEnv:       endpoint.APIKeyEnv,
+		SupportedClient: endpoint.SupportedClient,
+		Clients:         endpoint.Clients(),
+		Models:          append([]string(nil), endpoint.Models...),
+		KeepProxyConfig: endpoint.KeepProxyConfig,
+		UseProxy:        endpoint.UseProxy,
+		Enabled:         endpoint.IsEnabled(),
+		Description:     endpoint.Description,
+		ListModelsCmd:   endpoint.ListModelsCmd,
+		MaskedAPIKey:    providers.MaskedAPIKey(providers.ResolveAPIKey(endpoint, nil)),
+	})
+}
+
+func providerInputFromDTO(input ProviderInput) appapi.ProviderInput {
+	return appapi.ProviderInput{
+		Name:            input.Name,
 		Endpoint:        input.Endpoint,
 		APIKeyEnv:       input.APIKeyEnv,
-		SupportedClient: strings.Join(clients, ","),
+		SupportedClient: input.SupportedClient,
+		Clients:         input.Clients,
+		Models:          input.Models,
 		ListModelsCmd:   input.ListModelsCmd,
-		Models:          append([]string(nil), input.Models...),
 		KeepProxyConfig: input.KeepProxyConfig,
 		UseProxy:        input.UseProxy,
 		Enabled:         input.Enabled,
@@ -220,22 +183,45 @@ func endpointFromInput(input ProviderInput) providers.Endpoint {
 	}
 }
 
-func clientsFromInput(input ProviderInput) []string {
-	if len(input.Clients) > 0 {
-		return input.Clients
+func providerPatchFromDTO(input ProviderInput) appapi.ProviderPatch {
+	patch := appapi.ProviderPatch{
+		Enabled: input.Enabled,
 	}
-	if input.SupportedClient == "" {
-		return nil
+	if input.Endpoint != "" {
+		patch.Endpoint = &input.Endpoint
 	}
-	parts := strings.Split(input.SupportedClient, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if trimmed := strings.TrimSpace(part); trimmed != "" {
-			out = append(out, trimmed)
-		}
+	if input.APIKeyEnv != "" {
+		patch.APIKeyEnv = &input.APIKeyEnv
 	}
-	return out
+	if input.SupportedClient != "" {
+		patch.SupportedClient = &input.SupportedClient
+	} else if len(input.Clients) > 0 {
+		patch.Clients = &providers.ListPatch{Op: providers.ListOpReplace, Items: input.Clients}
+	}
+	if input.Models != nil {
+		patch.Models = &providers.ListPatch{Op: providers.ListOpReplace, Items: input.Models}
+	}
+	if input.ListModelsCmd != "" {
+		patch.ListModelsCmd = &input.ListModelsCmd
+	}
+	if input.KeepProxyConfig {
+		patch.KeepProxyConfig = &input.KeepProxyConfig
+	}
+	if input.UseProxy {
+		patch.UseProxy = &input.UseProxy
+	}
+	if input.Description != "" {
+		patch.Description = &input.Description
+	}
+	return patch
 }
 
-func strPtr(v string) *string { return &v }
-func boolPtr(v bool) *bool    { return &v }
+func wrapProviderError(code string, err error, name string) error {
+	if err == nil {
+		return nil
+	}
+	if code == "PROVIDER_NOT_FOUND" {
+		return NewError(code, "provider not found", map[string]string{"name": name})
+	}
+	return wrapError(code, err)
+}

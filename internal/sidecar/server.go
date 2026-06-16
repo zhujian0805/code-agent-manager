@@ -1,0 +1,322 @@
+package sidecar
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"strings"
+
+	"github.com/chat2anyllm/code-agent-manager/internal/desktop"
+)
+
+// Server exposes CAM app operations over a localhost-only HTTP API for Tauri.
+type Server struct {
+	version       string
+	providersPath string
+	token         string
+	services      desktop.Services
+}
+
+// Options configures the sidecar HTTP server.
+type Options struct {
+	Version       string
+	ProvidersPath string
+	Token         string
+}
+
+// Startup describes the selected listen address after the server starts.
+type Startup struct {
+	Host  string `json:"host"`
+	Port  int    `json:"port"`
+	Token string `json:"token,omitempty"`
+}
+
+// New constructs a sidecar server.
+func New(opts Options) *Server {
+	version := opts.Version
+	if version == "" {
+		version = "dev"
+	}
+	return &Server{
+		version:       version,
+		providersPath: opts.ProvidersPath,
+		token:         opts.Token,
+		services:      desktop.NewServices(version, opts.ProvidersPath),
+	}
+}
+
+// Handler returns the sidecar HTTP handler.
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/app/version", s.handleVersion)
+	mux.HandleFunc("/api/providers", s.handleProviders)
+	mux.HandleFunc("/api/providers/", s.handleProvider)
+	mux.HandleFunc("/api/tools", s.handleTools)
+	mux.HandleFunc("/api/mcp/clients", s.handleMCPClients)
+	mux.HandleFunc("/api/mcp/servers", s.handleMCPServers)
+	mux.HandleFunc("/api/entities", s.handleEntities)
+	mux.HandleFunc("/api/config/files", s.handleConfigFiles)
+	mux.HandleFunc("/api/doctor/checks", s.handleDoctorChecks)
+	mux.HandleFunc("/api/launch/dry-run", s.handleLaunchDryRun)
+	return s.withMiddleware(mux)
+}
+
+// ListenAndServe starts the HTTP server on host:port. Use port 0 for a random port.
+func (s *Server) ListenAndServe(ctx context.Context, host string, port int) (Startup, error) {
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
+	if err != nil {
+		return Startup{}, err
+	}
+	actual := listener.Addr().(*net.TCPAddr)
+	startup := Startup{Host: host, Port: actual.Port, Token: s.token}
+	server := &http.Server{Handler: s.Handler()}
+	go func() {
+		<-ctx.Done()
+		_ = server.Shutdown(context.Background())
+	}()
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			panic(err)
+		}
+	}()
+	return startup, nil
+}
+
+func (s *Server) withMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if s.token != "" && r.Header.Get("Authorization") != "Bearer "+s.token {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, map[string]string{"version": s.services.App.Version(), "platform": s.services.App.Platform()})
+}
+
+func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		providers, err := s.services.Providers.List()
+		writeResult(w, providers, err)
+	case http.MethodPost:
+		var input desktop.ProviderInput
+		if err := decodeJSON(r, &input); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		provider, err := s.services.Providers.Add(input)
+		writeResult(w, provider, err)
+	default:
+		methodNotAllowed(w)
+	}
+}
+
+func (s *Server) handleProvider(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/providers/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeError(w, http.StatusNotFound, "provider not found")
+		return
+	}
+	name := parts[0]
+	action := ""
+	if len(parts) > 1 {
+		action = parts[1]
+	}
+
+	if action != "" {
+		s.handleProviderAction(w, r, name, action)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		provider, err := s.services.Providers.Show(name)
+		writeResult(w, provider, err)
+	case http.MethodPatch:
+		var input desktop.ProviderInput
+		if err := decodeJSON(r, &input); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		provider, err := s.services.Providers.Update(name, input)
+		writeResult(w, provider, err)
+	case http.MethodDelete:
+		result, err := s.services.Providers.Remove(name)
+		writeResult(w, result, err)
+	default:
+		methodNotAllowed(w)
+	}
+}
+
+func (s *Server) handleProviderAction(w http.ResponseWriter, r *http.Request, name, action string) {
+	if r.Method != http.MethodPost && action != "models" {
+		methodNotAllowed(w)
+		return
+	}
+	switch action {
+	case "enable":
+		provider, err := s.services.Providers.Enable(name)
+		writeResult(w, provider, err)
+	case "disable":
+		provider, err := s.services.Providers.Disable(name)
+		writeResult(w, provider, err)
+	case "rename":
+		var input struct {
+			NewName string `json:"newName"`
+		}
+		if err := decodeJSON(r, &input); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		provider, err := s.services.Providers.Rename(name, input.NewName)
+		writeResult(w, provider, err)
+	case "models":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+		models, err := s.services.Providers.ResolveModels(name)
+		writeResult(w, models, err)
+	default:
+		writeError(w, http.StatusNotFound, "unknown provider action")
+	}
+}
+
+func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	tools, err := s.services.Tools.List()
+	writeResult(w, tools, err)
+}
+
+func (s *Server) handleMCPClients(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, s.services.MCP.ListClients())
+}
+
+func (s *Server) handleMCPServers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	client := queryDefault(r, "client", "claude")
+	scope := queryDefault(r, "scope", "user")
+	servers, err := s.services.MCP.ListInstalled(client, scope)
+	writeResult(w, servers, err)
+}
+
+func (s *Server) handleEntities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	kind := queryDefault(r, "kind", "skill")
+	query := r.URL.Query().Get("query")
+	if query != "" {
+		entities, err := s.services.Entities.Search(kind, query)
+		writeResult(w, entities, err)
+		return
+	}
+	entities, err := s.services.Entities.List(kind)
+	writeResult(w, entities, err)
+}
+
+func (s *Server) handleConfigFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, s.services.Config.ListFiles())
+}
+
+func (s *Server) handleDoctorChecks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	checks, err := s.services.Doctor.RunChecks(r.Context())
+	writeResult(w, checks, err)
+}
+
+func (s *Server) handleLaunchDryRun(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	input := struct {
+		Tool     string   `json:"tool"`
+		Provider string   `json:"provider"`
+		Model    string   `json:"model"`
+		Args     []string `json:"args"`
+	}{
+		Tool:     r.URL.Query().Get("tool"),
+		Provider: r.URL.Query().Get("provider"),
+		Model:    r.URL.Query().Get("model"),
+	}
+	if r.Method == http.MethodPost && r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&input)
+	}
+	plan, err := s.services.Launch.DryRun(input.Tool, input.Provider, input.Model, input.Args)
+	writeResult(w, plan, err)
+}
+
+func queryDefault(r *http.Request, key, fallback string) string {
+	value := r.URL.Query().Get(key)
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func decodeJSON(r *http.Request, out any) error {
+	defer r.Body.Close()
+	return json.NewDecoder(r.Body).Decode(out)
+}
+
+func writeResult(w http.ResponseWriter, value any, err error) {
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, value)
+}
+
+func writeJSON(w http.ResponseWriter, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(value)
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": message})
+}
+
+func methodNotAllowed(w http.ResponseWriter) {
+	writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+}

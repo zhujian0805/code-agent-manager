@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/chat2anyllm/code-agent-manager/internal/appapi"
 	"github.com/chat2anyllm/code-agent-manager/internal/providers"
 )
 
@@ -46,25 +48,21 @@ func resolveProvidersPath(state *globalState) string {
 	return providers.DefaultPath()
 }
 
+func providerAPI(state *globalState) appapi.ProviderAPI {
+	return appapi.ProviderAPI{ProvidersPath: resolveProvidersPath(state)}
+}
+
 func (a *App) providerInitCommand(state *globalState) *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
 		Short: "Create an empty providers.json if it does not already exist",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			path := resolveProvidersPath(state)
-			file, created, err := providers.LoadOrInit(path)
+			result, err := providerAPI(state).Init(context.Background())
 			if err != nil {
 				return err
 			}
-			if !created {
-				fmt.Fprintf(cmd.OutOrStdout(), "providers.json already exists at %s\n", path)
-				return nil
-			}
-			if err := providers.Save(path, file); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Created empty providers.json at %s\n", path)
+			fmt.Fprintln(cmd.OutOrStdout(), result.Message)
 			return nil
 		},
 	}
@@ -78,12 +76,12 @@ func (a *App) providerListCommand(state *globalState) *cobra.Command {
 		Short: "List configured providers",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			path := resolveProvidersPath(state)
-			file, _, err := providers.LoadOrInit(path)
+			listed, err := providerAPI(state).List(context.Background())
 			if err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
+			file := providersFileFromAPI(listed)
 			names := file.SortedNames()
 			filtered := make([]string, 0, len(names))
 			for _, n := range names {
@@ -151,32 +149,25 @@ func (a *App) providerShowCommand(state *globalState) *cobra.Command {
 		Short: "Show the configuration for a single provider",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := resolveProvidersPath(state)
-			file, _, err := providers.LoadOrInit(path)
+			provider, err := providerAPI(state).Show(context.Background(), args[0])
 			if err != nil {
-				return err
-			}
-			ep, ok := file.Endpoints[args[0]]
-			if !ok {
 				return fmt.Errorf("provider %q not found (try 'cam provider list')", args[0])
 			}
 			out := cmd.OutOrStdout()
-			// Build a copy of the endpoint with a calculated API-key
-			// display so we don't leak the raw env variable name twice.
 			payload := map[string]any{
-				"name":              args[0],
-				"endpoint":          ep.Endpoint,
-				"api_key_env":       ep.APIKeyEnv,
-				"supported_client":  ep.SupportedClient,
-				"list_of_models":    ep.Models,
-				"list_models_cmd":   ep.ListModelsCmd,
-				"use_proxy":         ep.UseProxy,
-				"keep_proxy_config": ep.KeepProxyConfig,
-				"enabled":           ep.IsEnabled(),
-				"description":       ep.Description,
+				"name":              provider.Name,
+				"endpoint":          provider.Endpoint,
+				"api_key_env":       provider.APIKeyEnv,
+				"supported_client":  provider.SupportedClient,
+				"list_of_models":    provider.Models,
+				"list_models_cmd":   provider.ListModelsCmd,
+				"use_proxy":         provider.UseProxy,
+				"keep_proxy_config": provider.KeepProxyConfig,
+				"enabled":           provider.Enabled,
+				"description":       provider.Description,
 			}
-			if ep.APIKeyEnv != "" {
-				raw := os.Getenv(ep.APIKeyEnv)
+			if provider.APIKeyEnv != "" {
+				raw := os.Getenv(provider.APIKeyEnv)
 				if revealKey {
 					payload["api_key"] = raw
 				} else {
@@ -238,13 +229,11 @@ func (a *App) providerAddCommand(state *globalState) *cobra.Command {
 			if name != "" && cmd.Flags().Changed("endpoint") {
 				return a.providerAddFlagMode(cmd, state, name, flags)
 			}
-
-			path := resolveProvidersPath(state)
-			file, _, err := providers.LoadOrInit(path)
+			listed, err := providerAPI(state).List(context.Background())
 			if err != nil {
 				return err
 			}
-			existingNames := file.SortedNames()
+			existingNames := providersFileFromAPI(listed).SortedNames()
 			name, ep, cancelled, err := runProviderWizard(cmd.OutOrStdout(), cmd.InOrStdin(), wizardModeAdd, nil, "", existingNames)
 			if err != nil {
 				return err
@@ -252,17 +241,10 @@ func (a *App) providerAddCommand(state *globalState) *cobra.Command {
 			if cancelled {
 				return nil
 			}
-			file, _, err = providers.LoadOrInit(path)
-			if err != nil {
-				return err
-			}
-			if err := providers.Add(&file, name, ep); err != nil {
+			if _, err := providerAPI(state).Add(context.Background(), providerInputFromEndpoint(name, ep)); err != nil {
 				if errors.Is(err, providers.ErrAlreadyExists) {
 					return fmt.Errorf("provider %q already exists (use 'cam provider update %s ...' to change it)", name, name)
 				}
-				return err
-			}
-			if err := providers.Save(path, file); err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
@@ -289,12 +271,11 @@ func (a *App) providerAddFlagMode(cmd *cobra.Command, state *globalState, name s
 	}
 
 	path := resolveProvidersPath(state)
-	file, created, err := providers.LoadOrInit(path)
-	if err != nil {
-		return err
-	}
+	_, statErr := os.Stat(path)
+	created := os.IsNotExist(statErr)
 
-	ep := providers.Endpoint{
+	input := appapi.ProviderInput{
+		Name:            name,
 		Endpoint:        flags.endpoint,
 		APIKeyEnv:       flags.apiKeyEnv,
 		ListModelsCmd:   flags.listModelsCmd,
@@ -307,30 +288,27 @@ func (a *App) providerAddFlagMode(cmd *cobra.Command, state *globalState, name s
 		if err != nil {
 			return fmt.Errorf("--client: %w", err)
 		}
-		ep.SupportedClient = strings.Join(items, ",")
+		input.Clients = items
 	}
 	if flags.models != "" {
 		_, items, err := parseListFlag(flags.models, true)
 		if err != nil {
 			return fmt.Errorf("--model: %w", err)
 		}
-		ep.Models = items
+		input.Models = items
 	}
 	if flags.disabled {
 		v := false
-		ep.Enabled = &v
+		input.Enabled = &v
 	} else if flags.enabled {
 		v := true
-		ep.Enabled = &v
+		input.Enabled = &v
 	}
 
-	if err := providers.Add(&file, name, ep); err != nil {
+	if _, err := providerAPI(state).Add(context.Background(), input); err != nil {
 		if errors.Is(err, providers.ErrAlreadyExists) {
 			return fmt.Errorf("provider %q already exists (use 'cam provider update %s ...' to change it)", name, name)
 		}
-		return err
-	}
-	if err := providers.Save(path, file); err != nil {
 		return err
 	}
 	out := cmd.OutOrStdout()
@@ -355,12 +333,11 @@ func (a *App) providerUpdateCommand(state *globalState) *cobra.Command {
 					return a.providerUpdateFlagMode(cmd, state, name, flags)
 				}
 			}
-
-			path := resolveProvidersPath(state)
-			file, _, err := providers.LoadOrInit(path)
+			listed, err := providerAPI(state).List(context.Background())
 			if err != nil {
 				return err
 			}
+			file := providersFileFromAPI(listed)
 			ep, ok := file.Endpoints[name]
 			if !ok {
 				return fmt.Errorf("provider %q not found (try 'cam provider list')", name)
@@ -372,8 +349,7 @@ func (a *App) providerUpdateCommand(state *globalState) *cobra.Command {
 			if cancelled {
 				return nil
 			}
-			file.Endpoints[name] = newEp
-			if err := providers.Save(path, file); err != nil {
+			if _, err := providerAPI(state).Update(context.Background(), name, providerPatchFromEndpoint(newEp)); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Updated provider %q\n", name)
@@ -395,7 +371,7 @@ func (a *App) providerUpdateFlagMode(cmd *cobra.Command, state *globalState, nam
 		return errors.New("--enabled and --disabled are mutually exclusive")
 	}
 
-	patch := providers.Patch{}
+	patch := appapi.ProviderPatch{}
 	if cmd.Flags().Changed("endpoint") {
 		v := flags.endpoint
 		patch.Endpoint = &v
@@ -448,18 +424,10 @@ func (a *App) providerUpdateFlagMode(cmd *cobra.Command, state *globalState, nam
 		patch.Models = &providers.ListPatch{Op: op, Items: items}
 	}
 
-	path := resolveProvidersPath(state)
-	file, _, err := providers.LoadOrInit(path)
-	if err != nil {
-		return err
-	}
-	if err := providers.Update(&file, name, patch); err != nil {
+	if _, err := providerAPI(state).Update(context.Background(), name, patch); err != nil {
 		if errors.Is(err, providers.ErrNotFound) {
 			return fmt.Errorf("provider %q not found (try 'cam provider list')", name)
 		}
-		return err
-	}
-	if err := providers.Save(path, file); err != nil {
 		return err
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Updated provider %q\n", name)
@@ -475,12 +443,7 @@ func (a *App) providerRemoveCommand(state *globalState) *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			path := resolveProvidersPath(state)
-			file, _, err := providers.LoadOrInit(path)
-			if err != nil {
-				return err
-			}
-			if _, ok := file.Endpoints[name]; !ok {
+			if _, err := providerAPI(state).Show(context.Background(), name); err != nil {
 				return fmt.Errorf("provider %q not found", name)
 			}
 			if !yes {
@@ -497,8 +460,7 @@ func (a *App) providerRemoveCommand(state *globalState) *cobra.Command {
 					return nil
 				}
 			}
-			providers.Remove(&file, name)
-			if err := providers.Save(path, file); err != nil {
+			if _, err := providerAPI(state).Remove(context.Background(), name); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Removed provider %q\n", name)
@@ -530,18 +492,10 @@ func (a *App) providerDisableCommand(state *globalState) *cobra.Command {
 func toggleEnabledRunE(state *globalState, enabled bool) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		name := args[0]
-		path := resolveProvidersPath(state)
-		file, _, err := providers.LoadOrInit(path)
-		if err != nil {
-			return err
-		}
-		if err := providers.SetEnabled(&file, name, enabled); err != nil {
+		if _, err := providerAPI(state).SetEnabled(context.Background(), name, enabled); err != nil {
 			if errors.Is(err, providers.ErrNotFound) {
 				return fmt.Errorf("provider %q not found", name)
 			}
-			return err
-		}
-		if err := providers.Save(path, file); err != nil {
 			return err
 		}
 		state := "disabled"
@@ -559,21 +513,13 @@ func (a *App) providerRenameCommand(state *globalState) *cobra.Command {
 		Short: "Rename a provider entry",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := resolveProvidersPath(state)
-			file, _, err := providers.LoadOrInit(path)
-			if err != nil {
-				return err
-			}
-			if err := providers.Rename(&file, args[0], args[1]); err != nil {
+			if _, err := providerAPI(state).Rename(context.Background(), args[0], args[1]); err != nil {
 				if errors.Is(err, providers.ErrNotFound) {
 					return fmt.Errorf("provider %q not found", args[0])
 				}
 				if errors.Is(err, providers.ErrAlreadyExists) {
 					return fmt.Errorf("provider %q already exists", args[1])
 				}
-				return err
-			}
-			if err := providers.Save(path, file); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Renamed %q to %q\n", args[0], args[1])
@@ -614,6 +560,66 @@ func parseListFlag(raw string, addMode bool) (providers.ListOp, []string, error)
 		}
 	}
 	return op, out, nil
+}
+
+func providersFileFromAPI(listed []appapi.Provider) providers.File {
+	file := providers.File{Common: map[string]any{}, Endpoints: map[string]providers.Endpoint{}}
+	for _, provider := range listed {
+		file.Endpoints[provider.Name] = providerEndpointFromAPI(provider)
+	}
+	return file
+}
+
+func providerEndpointFromAPI(provider appapi.Provider) providers.Endpoint {
+	enabled := provider.Enabled
+	return providers.Endpoint{
+		Endpoint:        provider.Endpoint,
+		APIKeyEnv:       provider.APIKeyEnv,
+		SupportedClient: provider.SupportedClient,
+		ListModelsCmd:   provider.ListModelsCmd,
+		Models:          append([]string(nil), provider.Models...),
+		KeepProxyConfig: provider.KeepProxyConfig,
+		UseProxy:        provider.UseProxy,
+		Enabled:         &enabled,
+		Description:     provider.Description,
+	}
+}
+
+func providerInputFromEndpoint(name string, endpoint providers.Endpoint) appapi.ProviderInput {
+	return appapi.ProviderInput{
+		Name:            name,
+		Endpoint:        endpoint.Endpoint,
+		APIKeyEnv:       endpoint.APIKeyEnv,
+		SupportedClient: endpoint.SupportedClient,
+		Models:          append([]string(nil), endpoint.Models...),
+		ListModelsCmd:   endpoint.ListModelsCmd,
+		KeepProxyConfig: endpoint.KeepProxyConfig,
+		UseProxy:        endpoint.UseProxy,
+		Enabled:         endpoint.Enabled,
+		Description:     endpoint.Description,
+	}
+}
+
+func providerPatchFromEndpoint(endpoint providers.Endpoint) appapi.ProviderPatch {
+	endpointURL := endpoint.Endpoint
+	apiKeyEnv := endpoint.APIKeyEnv
+	supportedClient := endpoint.SupportedClient
+	listModelsCmd := endpoint.ListModelsCmd
+	description := endpoint.Description
+	keepProxyConfig := endpoint.KeepProxyConfig
+	useProxy := endpoint.UseProxy
+	models := providers.ListPatch{Op: providers.ListOpReplace, Items: append([]string(nil), endpoint.Models...)}
+	return appapi.ProviderPatch{
+		Endpoint:        &endpointURL,
+		APIKeyEnv:       &apiKeyEnv,
+		SupportedClient: &supportedClient,
+		Models:          &models,
+		ListModelsCmd:   &listModelsCmd,
+		KeepProxyConfig: &keepProxyConfig,
+		UseProxy:        &useProxy,
+		Enabled:         endpoint.Enabled,
+		Description:     &description,
+	}
 }
 
 // writeJSON pretty-prints v as 2-space indented JSON with a trailing newline.
