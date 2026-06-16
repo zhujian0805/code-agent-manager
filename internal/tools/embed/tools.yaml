@@ -113,14 +113,16 @@ tools:
       format: json
       upsert:
         env.ANTHROPIC_BASE_URL: "{endpoint}"
-        env.ANTHROPIC_AUTH_TOKEN: "{api_key}"
-        env.CLAUDE_CODE_OAUTH_TOKEN: "{api_key}"
+        env.ANTHROPIC_API_KEY: "{api_key}"
         env.ANTHROPIC_MODEL: "{selected_model}"
         env.ANTHROPIC_SMALL_FAST_MODEL: "{model_2}"
         env.ANTHROPIC_DEFAULT_SONNET_MODEL: "{selected_model}"
         env.ANTHROPIC_DEFAULT_HAIKU_MODEL: "{selected_model}"
         env.DISABLE_NON_ESSENTIAL_MODEL_CALLS: "1"
         env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      remove:
+        - env.ANTHROPIC_AUTH_TOKEN
+        - env.CLAUDE_CODE_OAUTH_TOKEN
     configuration:
       required:
         endpoint: "Base URL for the Anthropic-compatible API."

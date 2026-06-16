@@ -48,8 +48,7 @@ func TestPerTool_ClaudeCode_GoldenJSON(t *testing.T) {
 	env := got["env"].(map[string]any)
 	checks := map[string]any{
 		"ANTHROPIC_BASE_URL":                       "https://api.test",
-		"ANTHROPIC_AUTH_TOKEN":                     "sk-1234",
-		"CLAUDE_CODE_OAUTH_TOKEN":                  "sk-1234",
+		"ANTHROPIC_API_KEY":                        "sk-1234",
 		"ANTHROPIC_MODEL":                          "claude-sonnet-4",
 		"ANTHROPIC_DEFAULT_SONNET_MODEL":           "claude-sonnet-4",
 		"ANTHROPIC_DEFAULT_HAIKU_MODEL":            "claude-sonnet-4",
@@ -59,6 +58,11 @@ func TestPerTool_ClaudeCode_GoldenJSON(t *testing.T) {
 	for k, want := range checks {
 		if gotv := fmt.Sprint(env[k]); gotv != fmt.Sprint(want) {
 			t.Errorf("env[%q] = %v, want %v", k, env[k], want)
+		}
+	}
+	for _, removed := range []string{"ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"} {
+		if _, ok := env[removed]; ok {
+			t.Errorf("env[%q] should be removed", removed)
 		}
 	}
 }

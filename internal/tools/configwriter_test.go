@@ -187,6 +187,51 @@ func TestApply_JSON_PreservesUnrelatedKeys(t *testing.T) {
 	}
 }
 
+func TestApply_ClaudeCodeAPIKeyModeRemovesTokenAuth(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "settings.json")
+	if err := os.WriteFile(path, []byte(`{"env":{"ANTHROPIC_API_KEY":"old","ANTHROPIC_AUTH_TOKEN":"token","CLAUDE_CODE_OAUTH_TOKEN":"oauth"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tool := Tool{ConfigTarget: &ConfigTarget{
+		Path:   path,
+		Format: "json",
+		Upsert: map[string]string{
+			"env.ANTHROPIC_API_KEY":  "{api_key}",
+			"env.ANTHROPIC_BASE_URL": "{endpoint}",
+		},
+		Remove: []string{
+			"env.ANTHROPIC_AUTH_TOKEN",
+			"env.CLAUDE_CODE_OAUTH_TOKEN",
+		},
+	}}
+	plan, err := Plan(tool, providers.Endpoint{Endpoint: "http://localhost:5000"}, "local", "claude-opus-4-8", "new-key")
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if _, err := Apply(tool, plan); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	env := got["env"].(map[string]any)
+	if env["ANTHROPIC_API_KEY"] != "new-key" {
+		t.Errorf("ANTHROPIC_API_KEY = %v, want new-key", env["ANTHROPIC_API_KEY"])
+	}
+	if env["ANTHROPIC_BASE_URL"] != "http://localhost:5000" {
+		t.Errorf("ANTHROPIC_BASE_URL = %v, want http://localhost:5000", env["ANTHROPIC_BASE_URL"])
+	}
+	if _, ok := env["ANTHROPIC_AUTH_TOKEN"]; ok {
+		t.Errorf("ANTHROPIC_AUTH_TOKEN should be removed: %#v", env)
+	}
+	if _, ok := env["CLAUDE_CODE_OAUTH_TOKEN"]; ok {
+		t.Errorf("CLAUDE_CODE_OAUTH_TOKEN should be removed: %#v", env)
+	}
+}
+
 func TestApply_CreatesParentDir(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "nested", "deep", "x.json")

@@ -18,9 +18,10 @@ tools:
       format: json
       upsert:
         env.ANTHROPIC_BASE_URL: "{endpoint}"
-        env.ANTHROPIC_AUTH_TOKEN: "{api_key}"
+        env.ANTHROPIC_API_KEY: "{api_key}"
       remove:
-        - env.LEGACY_KEY
+        - env.ANTHROPIC_AUTH_TOKEN
+        - env.CLAUDE_CODE_OAUTH_TOKEN
 `)
 	reg, err := parseRegistry(data)
 	if err != nil {
@@ -43,11 +44,12 @@ tools:
 	if got := ct.Upsert["env.ANTHROPIC_BASE_URL"]; got != "{endpoint}" {
 		t.Errorf("upsert env.ANTHROPIC_BASE_URL = %q, want {endpoint}", got)
 	}
-	if got := ct.Upsert["env.ANTHROPIC_AUTH_TOKEN"]; got != "{api_key}" {
-		t.Errorf("upsert env.ANTHROPIC_AUTH_TOKEN = %q, want {api_key}", got)
+	if got := ct.Upsert["env.ANTHROPIC_API_KEY"]; got != "{api_key}" {
+		t.Errorf("upsert env.ANTHROPIC_API_KEY = %q, want {api_key}", got)
 	}
-	if len(ct.Remove) != 1 || ct.Remove[0] != "env.LEGACY_KEY" {
-		t.Errorf("remove = %v, want [env.LEGACY_KEY]", ct.Remove)
+	wantRemove := []string{"env.ANTHROPIC_AUTH_TOKEN", "env.CLAUDE_CODE_OAUTH_TOKEN"}
+	if !reflect.DeepEqual(ct.Remove, wantRemove) {
+		t.Errorf("remove = %v, want %v", ct.Remove, wantRemove)
 	}
 }
 
