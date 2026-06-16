@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -300,11 +301,19 @@ func writeModelsCache(path string, models []string) error {
 	return os.Rename(tmp, path)
 }
 
+func discoveryShell(command string) (string, []string) {
+	if runtime.GOOS == "windows" {
+		return "powershell", []string{"-NoProfile", "-Command", command}
+	}
+	return "sh", []string{"-c", command}
+}
+
 func runListModelsCmd(ep Endpoint, epName string, getenv func(string) string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), modelDiscoveryTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", ep.ListModelsCmd)
+	name, args := discoveryShell(ep.ListModelsCmd)
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = buildDiscoveryEnv(ep, getenv)
 
 	out, err := cmd.Output()

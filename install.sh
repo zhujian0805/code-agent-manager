@@ -41,13 +41,22 @@ build_binaries() {
 build_desktop() {
     print_header "Building desktop binary"
     mkdir -p dist
-    if command -v wails3 >/dev/null 2>&1 && [ -f wails.json ]; then
+    if command -v wails >/dev/null 2>&1 && [ -f wails.json ]; then
+        wails build
+        if [ -f build/bin/cam-desktop ]; then
+            cp build/bin/cam-desktop dist/cam-desktop
+        elif [ -f build/bin/cam-desktop.exe ]; then
+            cp build/bin/cam-desktop.exe dist/cam-desktop.exe
+        fi
+    elif command -v wails3 >/dev/null 2>&1 && [ -f wails.json ]; then
         wails3 build
         if [ -f bin/cam-desktop ]; then
             cp bin/cam-desktop dist/cam-desktop
+        elif [ -f bin/cam-desktop.exe ]; then
+            cp bin/cam-desktop.exe dist/cam-desktop.exe
         fi
     fi
-    if [ ! -f dist/cam-desktop ]; then
+    if [ ! -f dist/cam-desktop ] && [ ! -f dist/cam-desktop.exe ]; then
         go build -ldflags "-X main.version=$VERSION" -o dist/cam-desktop ./cmd/cam-desktop
     fi
     print_success "Built dist/cam-desktop"
@@ -69,10 +78,20 @@ install_binaries() {
 
 install_desktop() {
     print_header "Installing CAM desktop"
-    mkdir -p "$INSTALL_DIR" "$DESKTOP_ENTRY_DIR" "$DESKTOP_ICON_DIR"
-    cp dist/cam-desktop "$INSTALL_DIR/cam-desktop"
-    chmod 755 "$INSTALL_DIR/cam-desktop"
+    mkdir -p "$INSTALL_DIR"
+    local desktop_bin=cam-desktop
+    if [ -f dist/cam-desktop.exe ]; then
+        desktop_bin=cam-desktop.exe
+    fi
+    cp "dist/$desktop_bin" "$INSTALL_DIR/$desktop_bin"
+    chmod 755 "$INSTALL_DIR/$desktop_bin"
+    print_success "Installed $desktop_bin to $INSTALL_DIR"
 
+    if [ "$(uname -s)" != "Linux" ]; then
+        return
+    fi
+
+    mkdir -p "$DESKTOP_ENTRY_DIR" "$DESKTOP_ICON_DIR"
     if [ -f build/appicon.png ]; then
         cp build/appicon.png "$DESKTOP_ICON_DIR/cam-desktop.png"
     fi
@@ -82,13 +101,13 @@ install_desktop() {
 Type=Application
 Name=Code Agent Manager
 Comment=Desktop UI for code-agent-manager
-Exec=$INSTALL_DIR/cam-desktop
+Exec=$INSTALL_DIR/$desktop_bin
 Icon=cam-desktop
 Terminal=false
 Categories=Development;Utility;
 EOF
     chmod 644 "$DESKTOP_ENTRY_DIR/cam-desktop.desktop"
-    print_success "Installed cam-desktop to $INSTALL_DIR and desktop entry to $DESKTOP_ENTRY_DIR"
+    print_success "Installed desktop entry to $DESKTOP_ENTRY_DIR"
 }
 
 setup_config() {

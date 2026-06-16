@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"runtime"
 	"testing"
 
 	"github.com/chat2anyllm/code-agent-manager/internal/tools"
@@ -32,7 +33,11 @@ func TestInstallRunsInstallCmdThroughShell(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Install code = %d", code)
 	}
-	if r.gotName != "/bin/sh" || len(r.gotArgs) != 2 || r.gotArgs[0] != "-c" {
+	wantShell, wantShellFlag := "/bin/sh", "-c"
+	if runtime.GOOS == "windows" {
+		wantShell, wantShellFlag = "cmd", "/C"
+	}
+	if r.gotName != wantShell || len(r.gotArgs) != 2 || r.gotArgs[0] != wantShellFlag {
 		t.Fatalf("invocation = %s %v", r.gotName, r.gotArgs)
 	}
 	if r.gotArgs[1] != "npm install -g @foo/bar@latest" {
@@ -55,7 +60,11 @@ func TestUninstallNpmInvokesNpmUninstall(t *testing.T) {
 	if msg != "npm uninstall -g @foo/bar" {
 		t.Fatalf("msg = %q", msg)
 	}
-	if r.gotName != "/bin/sh" || r.gotArgs[1] != "npm uninstall -g @foo/bar" {
+	wantShell, _ := "/bin/sh", "-c"
+	if runtime.GOOS == "windows" {
+		wantShell = "cmd"
+	}
+	if r.gotName != wantShell || r.gotArgs[1] != "npm uninstall -g @foo/bar" {
 		t.Fatalf("invocation = %s %v", r.gotName, r.gotArgs)
 	}
 }
@@ -71,10 +80,22 @@ func TestUninstallNonNpmBinNotFoundIsBenign(t *testing.T) {
 	}
 }
 
+func testShell(command string) (string, []string) {
+	if runtime.GOOS == "windows" {
+		return "cmd", []string{"/C", command}
+	}
+	return "/bin/sh", []string{"-c", command}
+}
+
 func TestShellRunnerStreamsTrueExit(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	code, err := tools.ShellRunner{}.Run("/bin/sh", []string{"-c", "true"}, stdout, stderr)
+	successCommand := "true"
+	if runtime.GOOS == "windows" {
+		successCommand = "exit 0"
+	}
+	name, args := testShell(successCommand)
+	code, err := tools.ShellRunner{}.Run(name, args, stdout, stderr)
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -84,7 +105,8 @@ func TestShellRunnerStreamsTrueExit(t *testing.T) {
 }
 
 func TestShellRunnerCapturesExitCode(t *testing.T) {
-	code, err := tools.ShellRunner{}.Run("/bin/sh", []string{"-c", "exit 7"}, io.Discard, io.Discard)
+	name, args := testShell("exit 7")
+	code, err := tools.ShellRunner{}.Run(name, args, io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}

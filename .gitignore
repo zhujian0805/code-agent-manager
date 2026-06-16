@@ -24,3 +24,6 @@ codebuddy_usage.md
 .gemini/
 goose*
 node_modules
+cmd/cam-desktop/webui/dist/
+bin/
+*.syso

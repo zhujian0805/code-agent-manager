@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -87,6 +88,9 @@ func TestConfigCheckMissingFile(t *testing.T) {
 }
 
 func TestConfigCheckParsesValidFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not preserve POSIX 0600 permission bits")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "providers.json")
 	if err := os.WriteFile(path, []byte(`{"endpoints":{}}`), 0o600); err != nil {
@@ -118,7 +122,11 @@ func TestEnvCheckFallbackToHome(t *testing.T) {
 
 	r := &fakeReporter{}
 	res := doctor.EnvCheck{}.Run(context.Background(), r)
-	if res.Issues != 0 {
+	if runtime.GOOS == "windows" {
+		if res.Issues != 1 || !contains(r.warns, "Environment file permissions") {
+			t.Fatalf("expected Windows permission warning, got issues=%d warns=%v", res.Issues, r.warns)
+		}
+	} else if res.Issues != 0 {
 		t.Fatalf("expected 0 issues, got %d (warns=%v)", res.Issues, r.warns)
 	}
 	if !contains(r.passes, ".env") {

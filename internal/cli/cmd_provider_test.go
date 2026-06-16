@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -43,8 +44,10 @@ func TestProviderInitCreatesEmptyFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat err = %v", err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Fatalf("perm = %o, want 0o600", perm)
+	if runtime.GOOS != "windows" {
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Fatalf("perm = %o, want 0o600", perm)
+		}
 	}
 
 	data, _ := os.ReadFile(cfgPath)

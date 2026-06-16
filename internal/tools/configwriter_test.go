@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -249,6 +250,9 @@ func TestApply_CreatesParentDir(t *testing.T) {
 }
 
 func TestApply_FilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not preserve POSIX 0600 permission bits")
+	}
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "p.json")
 	tool := Tool{ConfigTarget: &ConfigTarget{

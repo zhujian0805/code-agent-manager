@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -204,7 +206,11 @@ func TestLaunchAutoSelectLogsToStderr(t *testing.T) {
 func TestLaunchAutoSelectInvokesListModelsCmd(t *testing.T) {
 	isolatedHome(t)
 	providersFile := filepath.Join(t.TempDir(), "providers.json")
-	payload := `{"endpoints":{"dyn":{"endpoint":"https://x","supported_client":"claude","list_models_cmd":"printf 'one\\ntwo\\n'"}}}`
+	cmd := "printf 'one\\ntwo\\n'"
+	if runtime.GOOS == "windows" {
+		cmd = "Write-Output 'one','two'"
+	}
+	payload := `{"endpoints":{"dyn":{"endpoint":"https://x","supported_client":"claude","list_models_cmd":` + strconv.Quote(cmd) + `}}}`
 	if err := os.WriteFile(providersFile, []byte(payload), 0o600); err != nil {
 		t.Fatal(err)
 	}

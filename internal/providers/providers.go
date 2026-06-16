@@ -29,13 +29,13 @@ type File struct {
 // Enabled is a pointer so a missing key is treated as the default ("true"),
 // matching the Python implementation.
 type Endpoint struct {
-	Endpoint        string   `json:"endpoint"`
-	APIKeyEnv       string   `json:"api_key_env"`
-	SupportedClient string   `json:"supported_client"`
+	Endpoint        string `json:"endpoint"`
+	APIKeyEnv       string `json:"api_key_env"`
+	SupportedClient string `json:"supported_client"`
 	// ListModelsCmd is deprecated. CAM now fetches /v1/models directly and
 	// combines the fetched IDs with Models. This field remains as a fallback
 	// for older provider configs.
-	ListModelsCmd string `json:"list_models_cmd"`
+	ListModelsCmd   string   `json:"list_models_cmd"`
 	Models          []string `json:"list_of_models"`
 	KeepProxyConfig bool     `json:"keep_proxy_config"`
 	UseProxy        bool     `json:"use_proxy"`

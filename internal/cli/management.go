@@ -22,6 +22,7 @@ import (
 	"github.com/chat2anyllm/code-agent-manager/internal/camconfig"
 	"github.com/chat2anyllm/code-agent-manager/internal/entities"
 	"github.com/chat2anyllm/code-agent-manager/internal/fetching"
+	"github.com/chat2anyllm/code-agent-manager/internal/pathutil"
 	"github.com/chat2anyllm/code-agent-manager/internal/repoconfig"
 )
 
@@ -148,7 +149,7 @@ Set GITHUB_TOKEN or GH_TOKEN for higher API rate limits.`,
 
 			// Tier 1: GitHub results.
 			if len(ghResults) > 0 {
-				if isInteractive() {
+				if isInteractive(os.Stdin) {
 					fmt.Fprintf(out, "Showing %d %s(s) matching %q\n", len(ghResults), kind, query)
 					return promptSearchInstall(ghResults, kind, out)
 				}
@@ -1134,7 +1135,7 @@ Use --repos to also display configured repository sources.`,
 func expandPath(path string) string {
 	home := os.Getenv("HOME")
 	if home == "" {
-		home, _ = os.UserHomeDir()
+		home = pathutil.Home()
 	}
 	return os.ExpandEnv(strings.ReplaceAll(path, "~", home))
 }
@@ -1392,7 +1393,7 @@ Use --force to overwrite existing installations.`,
 				if app != "" {
 					return []string{app}, nil
 				}
-				if !isInteractive() {
+				if !isInteractive(cmd.InOrStdin()) {
 					return nil, fmt.Errorf("--app is required (one of: %s)", strings.Join(entities.SupportedApps(kind), ", "))
 				}
 				return promptSelectApp(kind)
@@ -1406,7 +1407,7 @@ Use --force to overwrite existing installations.`,
 				if len(args) >= 2 {
 					skillName = args[1]
 				}
-				return installFromLocal(kind, args[0], skillName, all, force, out, resolveApps)
+				return installFromLocal(kind, args[0], skillName, all, force, out, resolveApps, cmd.InOrStdin())
 			}
 
 			if fromGH {
@@ -1417,7 +1418,7 @@ Use --force to overwrite existing installations.`,
 				if len(args) >= 2 {
 					skillName = args[1]
 				}
-				return installFromGitHub(kind, args[0], skillName, all, force, out, resolveApps)
+				return installFromGitHub(kind, args[0], skillName, all, force, out, resolveApps, cmd.InOrStdin())
 			}
 
 			// Default: install from local store.
@@ -1516,12 +1517,10 @@ func installAllFromStore(store *entities.Store, kind entities.Kind, app string, 
 
 // --- install from local directory ------------------------------------------
 
-func installFromLocal(kind entities.Kind, dirPath, skillName string, all, force bool, out io.Writer, resolveApps func() ([]string, error)) error {
+func installFromLocal(kind entities.Kind, dirPath, skillName string, all, force bool, out io.Writer, resolveApps func() ([]string, error), stdin io.Reader) error {
 	// Resolve ~ and relative paths.
 	if strings.HasPrefix(dirPath, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			dirPath = filepath.Join(home, dirPath[2:])
-		}
+		dirPath = filepath.Join(pathutil.Home(), dirPath[2:])
 	}
 	absPath, err := filepath.Abs(dirPath)
 	if err != nil {
@@ -1543,7 +1542,7 @@ func installFromLocal(kind entities.Kind, dirPath, skillName string, all, force 
 	}
 
 	// Let user pick skills first.
-	items, err = selectItems(items, skillName, all, kind, absPath)
+	items, err = selectItems(items, skillName, all, kind, absPath, stdin)
 	if err != nil {
 		return err
 	}
@@ -1559,7 +1558,7 @@ func installFromLocal(kind entities.Kind, dirPath, skillName string, all, force 
 		installed := 0
 		for _, item := range items {
 			if !force && isAlreadyInstalled(item.name, kind, app) {
-				if isInteractive() && confirmOverwrite(item.name, kind, app) {
+				if isInteractive(stdin) && confirmOverwrite(item.name, kind, app) {
 					// user said yes — fall through to install
 				} else {
 					fmt.Fprintf(out, "  Skipping %s (already installed)\n", item.name)
@@ -1586,7 +1585,7 @@ func installFromLocal(kind entities.Kind, dirPath, skillName string, all, force 
 
 // --- install from GitHub ---------------------------------------------------
 
-func installFromGitHub(kind entities.Kind, repoArg, skillName string, all, force bool, out io.Writer, resolveApps func() ([]string, error)) error {
+func installFromGitHub(kind entities.Kind, repoArg, skillName string, all, force bool, out io.Writer, resolveApps func() ([]string, error), stdin io.Reader) error {
 	// Parse owner/repo, optional @branch.
 	ghOwner, ghRepo, ghBranch := parseRepoArg(repoArg)
 	if ghOwner == "" || ghRepo == "" {
@@ -1611,7 +1610,7 @@ func installFromGitHub(kind entities.Kind, repoArg, skillName string, all, force
 
 	// Let user pick skills first.
 	source := fmt.Sprintf("%s/%s", ghOwner, ghRepo)
-	items, err = selectItems(items, skillName, all, kind, source)
+	items, err = selectItems(items, skillName, all, kind, source, stdin)
 	if err != nil {
 		return err
 	}
@@ -1627,7 +1626,7 @@ func installFromGitHub(kind entities.Kind, repoArg, skillName string, all, force
 		installed := 0
 		for _, item := range items {
 			if !force && isAlreadyInstalled(item.name, kind, app) {
-				if isInteractive() && confirmOverwrite(item.name, kind, app) {
+				if isInteractive(stdin) && confirmOverwrite(item.name, kind, app) {
 					// user said yes — fall through to install
 				} else {
 					fmt.Fprintf(out, "  Skipping %s (already installed)\n", item.name)
@@ -1774,7 +1773,7 @@ func matchesSkillConvention(relPath string) bool {
 //   - single item → return it directly
 //   - interactive TTY → run multi-select picker
 //   - non-interactive → list what was found and error
-func selectItems(items []discoveredItem, skillName string, all bool, kind entities.Kind, source string) ([]discoveredItem, error) {
+func selectItems(items []discoveredItem, skillName string, all bool, kind entities.Kind, source string, stdin io.Reader) ([]discoveredItem, error) {
 	if skillName != "" {
 		for _, item := range items {
 			if item.name == skillName {
@@ -1789,7 +1788,7 @@ func selectItems(items []discoveredItem, skillName string, all bool, kind entiti
 	}
 
 	// Interactive: run multi-select picker.
-	if isInteractive() {
+	if isInteractive(stdin) {
 		return interactiveSelectItems(items, kind, source)
 	}
 
@@ -1916,7 +1915,7 @@ func promptSearchInstall(results []ghSearchResult, kind entities.Kind, out io.Wr
 	// Install each selected skill from GitHub.
 	for _, r := range toInstall {
 		fmt.Fprintf(out, "\nInstalling %s from %s...\n", r.Name, r.Repo)
-		err := installFromGitHub(kind, r.Repo, r.Name, true, false, out, appsFn)
+		err := installFromGitHub(kind, r.Repo, r.Name, true, false, out, appsFn, os.Stdin)
 		if err != nil {
 			fmt.Fprintf(out, "  Error: %v\n", err)
 		}
@@ -1979,8 +1978,12 @@ func (m singleSelectModel) View() string {
 }
 
 // isInteractive returns true if stdin is a TTY (interactive terminal).
-func isInteractive() bool {
-	fi, err := os.Stdin.Stat()
+func isInteractive(stdin io.Reader) bool {
+	file, ok := stdin.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := file.Stat()
 	if err != nil {
 		return false
 	}
@@ -2113,7 +2116,7 @@ Use --all to uninstall every installed item from the selected agent(s).`,
 			var apps []string
 			if app != "" {
 				apps = []string{app}
-			} else if isInteractive() {
+			} else if isInteractive(cmd.InOrStdin()) {
 				picked, err := promptSelectApp(kind)
 				if err != nil {
 					return err
@@ -2125,7 +2128,7 @@ Use --all to uninstall every installed item from the selected agent(s).`,
 
 			if !all && len(args) == 0 {
 				// Interactive: list what's installed and let user pick.
-				if isInteractive() {
+				if isInteractive(cmd.InOrStdin()) {
 					return interactiveUninstall(kind, apps, out)
 				}
 				return fmt.Errorf("NAME is required (or use --all)")

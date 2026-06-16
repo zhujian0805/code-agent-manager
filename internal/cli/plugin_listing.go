@@ -20,8 +20,8 @@ import (
 
 // claudeInstalledPlugins matches ~/.claude/plugins/installed_plugins.json.
 type claudeInstalledPlugins struct {
-	Version int                                `json:"version"`
-	Plugins map[string][]claudePluginInstall   `json:"plugins"`
+	Version int                              `json:"version"`
+	Plugins map[string][]claudePluginInstall `json:"plugins"`
 }
 
 // claudePluginInstall is one installation entry for a plugin@marketplace key.
@@ -37,8 +37,8 @@ type claudePluginInstall struct {
 // claudeMarketplace matches one entry in ~/.claude/plugins/known_marketplaces.json.
 type claudeMarketplace struct {
 	Source          claudeMarketplaceSource `json:"source"`
-	InstallLocation string                 `json:"installLocation"`
-	LastUpdated     string                 `json:"lastUpdated"`
+	InstallLocation string                  `json:"installLocation"`
+	LastUpdated     string                  `json:"lastUpdated"`
 }
 
 type claudeMarketplaceSource struct {

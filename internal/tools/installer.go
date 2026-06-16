@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/google/shlex"
@@ -51,6 +52,14 @@ func (ShellRunner) Run(name string, args []string, stdout, stderr io.Writer) (in
 // Empty install_cmd returns nil with a "no install command" sentinel.
 var ErrNoInstallCommand = errors.New("tools: tool has no install_cmd")
 
+// shellCommand returns the platform shell invocation for a command string.
+func shellCommand(command string) (string, []string) {
+	if runtime.GOOS == "windows" {
+		return "cmd", []string{"/C", command}
+	}
+	return "/bin/sh", []string{"-c", command}
+}
+
 // Install installs the tool by executing its install_cmd through the shell.
 func Install(tool Tool, runner CommandRunner, stdout, stderr io.Writer) (int, error) {
 	if runner == nil {
@@ -59,8 +68,8 @@ func Install(tool Tool, runner CommandRunner, stdout, stderr io.Writer) (int, er
 	if strings.TrimSpace(tool.InstallCmd) == "" {
 		return 0, ErrNoInstallCommand
 	}
-	// Many install_cmd lines pipe to bash, so always run via /bin/sh -c.
-	return runner.Run("/bin/sh", []string{"-c", tool.InstallCmd}, stdout, stderr)
+	name, args := shellCommand(tool.InstallCmd)
+	return runner.Run(name, args, stdout, stderr)
 }
 
 // Uninstall best-effort removes the tool.  npm-installed tools are removed via
@@ -72,8 +81,10 @@ func Uninstall(tool Tool, runner CommandRunner, stdout, stderr io.Writer) (int, 
 	}
 	pkg, isNPM := npmPackage(tool.InstallCmd)
 	if isNPM {
-		code, err := runner.Run("/bin/sh", []string{"-c", fmt.Sprintf("npm uninstall -g %s", pkg)}, stdout, stderr)
-		return code, fmt.Sprintf("npm uninstall -g %s", pkg), err
+		cmd := fmt.Sprintf("npm uninstall -g %s", pkg)
+		name, args := shellCommand(cmd)
+		code, err := runner.Run(name, args, stdout, stderr)
+		return code, cmd, err
 	}
 	bin := tool.LaunchCommand()
 	if bin == "" {

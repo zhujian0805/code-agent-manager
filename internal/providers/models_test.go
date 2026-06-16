@@ -6,9 +6,37 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
+
+func listModelsCmd(lines ...string) string {
+	if runtime.GOOS == "windows" {
+		quoted := make([]string, 0, len(lines))
+		for _, line := range lines {
+			quoted = append(quoted, "'"+line+"'")
+		}
+		return "Write-Output " + strings.Join(quoted, ",")
+	}
+	return "printf '" + strings.Join(lines, "\\n") + "\\n'"
+}
+
+func envModelsCmd(names ...string) string {
+	if runtime.GOOS == "windows" {
+		parts := make([]string, 0, len(names))
+		for _, name := range names {
+			parts = append(parts, "if ($env:"+name+") { Write-Output $env:"+name+" } else { Write-Output 'EMPTY' }")
+		}
+		return strings.Join(parts, "; ")
+	}
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		parts = append(parts, "${"+name+":-EMPTY}")
+	}
+	return `printf '%s\n' ` + strings.Join(parts, " ")
+}
 
 func TestResolveModels_CombinesAPIDiscoveryWithStaticList(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +192,7 @@ func TestResolveModels_IgnoresCommandCacheWriteFailure(t *testing.T) {
 	}
 
 	got, err := ResolveModels(
-		Endpoint{ListModelsCmd: "printf 'cmd-a\\n'"},
+		Endpoint{ListModelsCmd: listModelsCmd("cmd-a")},
 		"ep",
 		time.Hour,
 		cacheDir,
@@ -202,7 +230,7 @@ func TestResolveModels_FallsBackToStaticListWhenAPIDiscoveryFails(t *testing.T) 
 func TestResolveModels_FallsBackToDeprecatedListModelsCmd(t *testing.T) {
 	ep := Endpoint{
 		Endpoint:      "http://127.0.0.1:1",
-		ListModelsCmd: "printf 'cmd-a\\ncmd-b\\n'",
+		ListModelsCmd: listModelsCmd("cmd-a", "cmd-b"),
 	}
 
 	got, err := ResolveModels(ep, "ep", time.Hour, t.TempDir(), os.Getenv)
@@ -246,7 +274,7 @@ func TestResolveModels_NeitherStaticNorCmd(t *testing.T) {
 
 func TestResolveModels_DynamicCacheMiss(t *testing.T) {
 	cacheDir := t.TempDir()
-	ep := Endpoint{ListModelsCmd: "printf 'alpha\\nbeta\\n'"}
+	ep := Endpoint{ListModelsCmd: listModelsCmd("alpha", "beta")}
 	got, err := ResolveModels(ep, "ep", time.Hour, cacheDir, os.Getenv)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -298,7 +326,7 @@ func TestResolveModels_DynamicStale(t *testing.T) {
 	payload, _ := json.Marshal(stale)
 	_ = os.WriteFile(cachePath, payload, 0o600)
 
-	ep := Endpoint{ListModelsCmd: "echo fresh"}
+	ep := Endpoint{ListModelsCmd: listModelsCmd("fresh")}
 	got, err := ResolveModels(ep, "ep", time.Hour, cacheDir, os.Getenv)
 	if err != nil {
 		t.Fatal(err)
@@ -337,7 +365,7 @@ func TestResolveModels_DeprecatedCommandEmptyStdoutReturnsEmpty(t *testing.T) {
 func TestResolveModels_StripsProxiesByDefault(t *testing.T) {
 	t.Setenv("http_proxy", "should-be-stripped")
 	t.Setenv("HTTPS_PROXY", "should-be-stripped")
-	ep := Endpoint{ListModelsCmd: `printf '%s\n%s\n' "${http_proxy:-EMPTY}" "${HTTPS_PROXY:-EMPTY}"`}
+	ep := Endpoint{ListModelsCmd: envModelsCmd("http_proxy", "HTTPS_PROXY")}
 	got, err := ResolveModels(ep, "ep", time.Hour, t.TempDir(), os.Getenv)
 	if err != nil {
 		t.Fatal(err)
@@ -352,7 +380,7 @@ func TestResolveModels_StripsProxiesByDefault(t *testing.T) {
 func TestResolveModels_KeepsProxiesWhenRequested(t *testing.T) {
 	t.Setenv("http_proxy", "kept-value")
 	ep := Endpoint{
-		ListModelsCmd:   `printf '%s\n' "${http_proxy:-EMPTY}"`,
+		ListModelsCmd:   envModelsCmd("http_proxy"),
 		KeepProxyConfig: true,
 	}
 	got, err := ResolveModels(ep, "ep", time.Hour, t.TempDir(), os.Getenv)
@@ -369,7 +397,7 @@ func TestResolveModels_ExposesEndpointAndApiKey(t *testing.T) {
 	ep := Endpoint{
 		Endpoint:      "https://x.example",
 		APIKeyEnv:     "CAM_TEST_KEY",
-		ListModelsCmd: `printf '%s\n%s\n' "$endpoint" "$api_key"`,
+		ListModelsCmd: envModelsCmd("endpoint", "api_key"),
 	}
 	got, err := ResolveModels(ep, "ep", time.Hour, t.TempDir(), os.Getenv)
 	if err != nil {

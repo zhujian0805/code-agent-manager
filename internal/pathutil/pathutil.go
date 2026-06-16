@@ -10,14 +10,29 @@ import (
 	"strings"
 )
 
-// Home returns the user's home directory.  Falls back to the $HOME environment
-// variable when os.UserHomeDir fails so that tests can override behaviour via
-// t.Setenv.
+// Home returns the user's home directory. The HOME environment variable wins so
+// tests and callers can intentionally isolate filesystem behavior on all
+// platforms, including Windows where os.UserHomeDir does not follow HOME.
 func Home() string {
+	if dir := os.Getenv("HOME"); dir != "" {
+		return dir
+	}
 	if dir, err := os.UserHomeDir(); err == nil && dir != "" {
 		return dir
 	}
-	return os.Getenv("HOME")
+	return ""
+}
+
+func joinHome(path string) string {
+	home := Home()
+	if strings.HasPrefix(home, "/") && !strings.Contains(home, "\\") {
+		path = strings.TrimPrefix(path, "/")
+		if path == "" {
+			return strings.TrimRight(home, "/")
+		}
+		return strings.TrimRight(home, "/") + "/" + path
+	}
+	return filepath.Join(home, path)
 }
 
 // Expand resolves a leading "~" segment to the user's home directory.
@@ -31,8 +46,8 @@ func Expand(path string) string {
 	if path == "~" {
 		return Home()
 	}
-	if strings.HasPrefix(path, "~/") {
-		return filepath.Join(Home(), strings.TrimPrefix(path, "~/"))
+	if suffix, ok := strings.CutPrefix(path, "~/"); ok {
+		return joinHome(suffix)
 	}
 	return path
 }

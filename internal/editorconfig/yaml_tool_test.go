@@ -3,6 +3,7 @@ package editorconfig
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -75,6 +76,9 @@ func TestYAML_SetAndUnset_PreservesOther(t *testing.T) {
 }
 
 func TestYAML_FilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not preserve POSIX 0600 permission bits")
+	}
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "perm.yaml")
 	tool := newYAMLToolConfig(spec{
