@@ -90,6 +90,70 @@ go build -o dist/cam ./cmd/cam
 
 5. **Select your assistant and start coding!**
 
+---
+
+## Desktop App and Developer Workflow
+
+CAM now uses a **Tauri desktop shell** with a **Go sidecar API**. The same Go backend packages power both the terminal CLI and the desktop UI, so provider and launch behavior stays consistent across interfaces.
+
+### Start the desktop app
+
+Use `make start` from the repository root:
+
+```bash
+make start
+```
+
+`make start`, `make app`, and `make dev` all run the same full desktop startup path. They build the Go sidecar expected by Tauri, start the Vite frontend dev server through Tauri, and open the desktop window.
+
+### Start browser-only frontend
+
+Use this when you only want the React UI in a browser with mock/fallback data or a manually configured sidecar URL:
+
+```bash
+make frontend
+```
+
+The browser frontend listens on `http://127.0.0.1:5173` by default. Override the host or port when needed:
+
+```bash
+make frontend FRONTEND_HOST=127.0.0.1 FRONTEND_PORT=5174
+```
+
+### Start the Go sidecar directly
+
+Use this for API testing without opening the desktop window:
+
+```bash
+make sidecar
+```
+
+By default, the sidecar binds to `127.0.0.1` and chooses a random port (`SIDECAR_PORT=0`). It prints startup JSON containing the selected port and bearer token. Override values when needed:
+
+```bash
+make sidecar SIDECAR_PORT=54321
+```
+
+### Build desktop assets and sidecar
+
+```bash
+make desktop-build
+```
+
+This runs the frontend production build, builds the Go sidecar, and checks the Tauri shell with Cargo. On Windows, the Makefile sets `CARGO_HTTP_CHECK_REVOKE=false` to avoid certificate revocation-check failures when Cargo downloads crates.
+
+### Other useful make targets
+
+```bash
+make start  # start the full Tauri desktop app
+make build   # build CLI binaries and sidecar into dist/
+make test    # run Go tests
+make check   # run Go vet, Go tests, frontend tests/build, sidecar build, and cargo check
+make clean   # remove generated build outputs
+```
+
+---
+
 ### Configuration files
 
 CAM uses these main configuration files:

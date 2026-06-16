@@ -7,7 +7,7 @@ describe('App shell', () => {
   it('renders launch dashboard and navigates to all primary pages', async () => {
     const user = userEvent.setup()
     render(<App />)
-    expect(await screen.findByRole('heading', { name: /dashboard \/ launch/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /^launch$/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /providers/i }))
     expect(await screen.findByRole('heading', { name: /providers/i })).toBeInTheDocument()
@@ -15,8 +15,17 @@ describe('App shell', () => {
     await user.click(screen.getByRole('button', { name: /mcp servers/i }))
     expect(await screen.findByRole('heading', { name: /mcp servers/i })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /library/i }))
-    expect(await screen.findByRole('heading', { name: /library/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /prompts/i }))
+    expect(await screen.findByRole('heading', { name: /prompts/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /skills/i }))
+    expect(await screen.findByRole('heading', { name: /skills/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /agents/i }))
+    expect(await screen.findByRole('heading', { name: /agents/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /plugins/i }))
+    expect(await screen.findByRole('heading', { name: /plugins/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /configuration/i }))
     expect(await screen.findByRole('heading', { name: /configuration/i })).toBeInTheDocument()
