@@ -1,12 +1,14 @@
 package cli_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/chat2anyllm/code-agent-manager/internal/appstate"
 )
 
 // `cam provider list` on a fresh machine emits a friendly "no providers"
@@ -27,49 +29,34 @@ func TestProviderListEmptyAutoCreatesNothing(t *testing.T) {
 	}
 }
 
-// `cam provider init` writes the empty skeleton with 0600 permissions and
-// is idempotent on a second call.
+// `cam provider init` creates the SQLite app-state database and is idempotent.
 func TestProviderInitCreatesEmptyFile(t *testing.T) {
 	home := isolatedHome(t)
 	cfgPath := filepath.Join(home, "cfg", "providers.json")
+	dbPath := cfgPath + ".db"
 
 	stdout, _, code := execute(t, "provider", "init")
 	if code != 0 {
 		t.Fatalf("init exit = %d", code)
 	}
-	if !strings.Contains(stdout, "Created empty providers.json") {
-		t.Fatalf("expected 'Created' notice, got: %s", stdout)
+	if !strings.Contains(stdout, "SQLite app state ready") {
+		t.Fatalf("expected SQLite ready notice, got: %s", stdout)
 	}
-	info, err := os.Stat(cfgPath)
-	if err != nil {
-		t.Fatalf("stat err = %v", err)
-	}
-	if runtime.GOOS != "windows" {
-		if perm := info.Mode().Perm(); perm != 0o600 {
-			t.Fatalf("perm = %o, want 0o600", perm)
-		}
-	}
-
-	data, _ := os.ReadFile(cfgPath)
-	parsed := map[string]any{}
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("parse err = %v", err)
-	}
-	if _, ok := parsed["endpoints"]; !ok {
-		t.Fatalf("file missing 'endpoints' key: %s", data)
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Fatalf("db stat err = %v", err)
 	}
 
 	stdout, _, code = execute(t, "provider", "init")
 	if code != 0 {
 		t.Fatalf("second init exit = %d", code)
 	}
-	if !strings.Contains(stdout, "already exists") {
-		t.Fatalf("expected idempotent notice, got: %s", stdout)
+	if !strings.Contains(stdout, "SQLite app state ready") {
+		t.Fatalf("expected idempotent SQLite ready notice, got: %s", stdout)
 	}
 }
 
-// End-to-end: `cam provider add` on a fresh machine creates providers.json
-// AND writes the new endpoint in one go (auto-create on first mutation).
+// End-to-end: `cam provider add` on a fresh machine creates the app-state DB
+// AND writes the new endpoint in one go.
 func TestProviderAddOnFreshMachineCreatesFile(t *testing.T) {
 	home := isolatedHome(t)
 	cfgPath := filepath.Join(home, "cfg", "providers.json")
@@ -92,25 +79,19 @@ func TestProviderAddOnFreshMachineCreatesFile(t *testing.T) {
 		t.Fatalf("expected 'Added provider' notice, got: %s", stdout)
 	}
 
-	data, err := os.ReadFile(cfgPath)
+	file, err := appstate.New(cfgPath + ".db").ListProviders(context.Background())
 	if err != nil {
-		t.Fatalf("read err = %v", err)
+		t.Fatalf("read providers from db: %v", err)
 	}
-	var parsed struct {
-		Endpoints map[string]map[string]any `json:"endpoints"`
-	}
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("parse err = %v", err)
-	}
-	got, ok := parsed.Endpoints["alpha"]
+	got, ok := file.Endpoints["alpha"]
 	if !ok {
-		t.Fatalf("alpha not present in file: %s", data)
+		t.Fatalf("alpha not present in db: %+v", file.Endpoints)
 	}
-	if got["endpoint"] != "https://alpha.example" {
-		t.Fatalf("endpoint = %v", got["endpoint"])
+	if got.Endpoint != "https://alpha.example" {
+		t.Fatalf("endpoint = %v", got.Endpoint)
 	}
-	if got["supported_client"] != "claude,codex" {
-		t.Fatalf("supported_client = %v", got["supported_client"])
+	if got.SupportedClient != "claude,codex" {
+		t.Fatalf("supported_client = %v", got.SupportedClient)
 	}
 }
 
@@ -535,8 +516,8 @@ func TestProviderRespectsProvidersFlag(t *testing.T) {
 	); code != 0 {
 		t.Fatal("add failed")
 	}
-	if _, err := os.Stat(custom); err != nil {
-		t.Fatalf("expected custom file written, err=%v", err)
+	if _, err := os.Stat(custom + ".db"); err != nil {
+		t.Fatalf("expected custom db written, err=%v", err)
 	}
 	stdout, _, _ := execute(t, "--providers", custom, "provider", "list")
 	if !strings.Contains(stdout, "alpha") {

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
+	"github.com/chat2anyllm/code-agent-manager/internal/appapi"
 	"github.com/chat2anyllm/code-agent-manager/internal/pathutil"
 	"github.com/chat2anyllm/code-agent-manager/internal/providers"
 	"github.com/chat2anyllm/code-agent-manager/internal/tools"
@@ -71,7 +73,7 @@ func (a *App) launchCommand(state *globalState) *cobra.Command {
 
 			// Load providers.json lazily — only when the wizard or
 			// auto-resolve actually needs an endpoint.
-			file, perr := providers.Load(state.providersPath)
+			file, perr := appapi.ProviderAPI{ProvidersPath: state.providersPath}.File(context.Background())
 			if perr != nil {
 				return perr
 			}

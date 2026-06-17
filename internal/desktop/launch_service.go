@@ -1,9 +1,11 @@
 package desktop
 
 import (
+	"context"
 	"os"
 	"time"
 
+	"github.com/chat2anyllm/code-agent-manager/internal/appapi"
 	"github.com/chat2anyllm/code-agent-manager/internal/providers"
 	"github.com/chat2anyllm/code-agent-manager/internal/tools"
 )
@@ -25,7 +27,7 @@ func (s *LaunchService) ListProvidersForTool(toolName string) ([]ProviderDTO, er
 	if err != nil {
 		return nil, err
 	}
-	file, err := providers.Load(s.providersPath)
+	file, err := appapi.ProviderAPI{ProvidersPath: s.providersPath}.File(context.Background())
 	if err != nil {
 		return nil, wrapError("PROVIDER_LOAD_FAILED", err)
 	}
@@ -43,7 +45,7 @@ func (s *LaunchService) ListProvidersForTool(toolName string) ([]ProviderDTO, er
 }
 
 func (s *LaunchService) ListModelsForProvider(providerName string) ([]string, error) {
-	file, err := providers.Load(s.providersPath)
+	file, err := appapi.ProviderAPI{ProvidersPath: s.providersPath}.File(context.Background())
 	if err != nil {
 		return nil, wrapError("PROVIDER_LOAD_FAILED", err)
 	}
@@ -63,7 +65,7 @@ func (s *LaunchService) DryRun(toolName, providerName, model string, extraArgs [
 	if err != nil {
 		return LaunchPlanDTO{}, err
 	}
-	file, err := providers.Load(s.providersPath)
+	file, err := appapi.ProviderAPI{ProvidersPath: s.providersPath}.File(context.Background())
 	if err != nil {
 		return LaunchPlanDTO{}, wrapError("PROVIDER_LOAD_FAILED", err)
 	}

@@ -3,8 +3,8 @@ package desktop
 import (
 	"context"
 
+	"github.com/chat2anyllm/code-agent-manager/internal/appapi"
 	"github.com/chat2anyllm/code-agent-manager/internal/doctor"
-	"github.com/chat2anyllm/code-agent-manager/internal/providers"
 )
 
 type DoctorService struct {
@@ -32,7 +32,7 @@ func (s *DoctorService) RunChecks(ctx context.Context) ([]DoctorCheckDTO, error)
 }
 
 func (s *DoctorService) checks() []doctor.Check {
-	file, _ := providers.Load(s.providersPath)
+	file, _ := appapi.ProviderAPI{ProvidersPath: s.providersPath}.File(context.Background())
 	return []doctor.Check{
 		doctor.InstallationCheck{Version: s.version},
 		doctor.ConfigCheck{Path: s.providersPath},

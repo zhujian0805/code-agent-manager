@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chat2anyllm/code-agent-manager/internal/appstate"
 	"github.com/chat2anyllm/code-agent-manager/internal/pathutil"
 	"github.com/chat2anyllm/code-agent-manager/internal/providers"
 )
@@ -67,6 +68,7 @@ type ProviderPatch struct {
 // ProviderAPI contains provider workflows shared by CLI and desktop adapters.
 type ProviderAPI struct {
 	ProvidersPath string
+	DBPath        string
 	CacheTTL      time.Duration
 	Env           func(string) string
 }
@@ -76,6 +78,20 @@ func (api ProviderAPI) path() string {
 		return api.ProvidersPath
 	}
 	return providers.DefaultPath()
+}
+
+func (api ProviderAPI) dbPath() string {
+	if api.DBPath != "" {
+		return api.DBPath
+	}
+	if api.ProvidersPath != "" {
+		return api.ProvidersPath + ".db"
+	}
+	return appstate.DefaultPath()
+}
+
+func (api ProviderAPI) store() appstate.Store {
+	return appstate.New(api.dbPath())
 }
 
 func (api ProviderAPI) getenv() func(string) string {
@@ -92,27 +108,30 @@ func (api ProviderAPI) cacheTTL() time.Duration {
 	return time.Hour
 }
 
-// Init creates an empty providers file if it does not already exist.
+// Init creates the SQLite app state database and imports providers.json when present.
 func (api ProviderAPI) Init(ctx context.Context) (OperationResult, error) {
-	_ = ctx
-	path := api.path()
-	file, created, err := providers.LoadOrInit(path)
-	if err != nil {
+	store := api.store()
+	if err := store.Init(ctx); err != nil {
 		return OperationResult{}, err
 	}
-	if !created {
-		return OperationResult{OK: true, Message: fmt.Sprintf("providers.json already exists at %s", path), Path: path}, nil
-	}
-	if err := providers.Save(path, file); err != nil {
+	if err := store.ImportProvidersJSON(ctx, api.path()); err != nil {
 		return OperationResult{}, err
 	}
-	return OperationResult{OK: true, Message: fmt.Sprintf("Created empty providers.json at %s", path), Path: path}, nil
+	return OperationResult{OK: true, Message: fmt.Sprintf("SQLite app state ready at %s", store.Path()), Path: store.Path()}, nil
+}
+
+// File returns providers in legacy providers.File shape for adapters that still need existing helpers.
+func (api ProviderAPI) File(ctx context.Context) (providers.File, error) {
+	store := api.store()
+	if err := store.ImportProvidersJSON(ctx, api.path()); err != nil {
+		return providers.File{}, err
+	}
+	return store.ListProviders(ctx)
 }
 
 // List returns all configured providers.
 func (api ProviderAPI) List(ctx context.Context) ([]Provider, error) {
-	_ = ctx
-	file, _, err := providers.LoadOrInit(api.path())
+	file, err := api.File(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -125,8 +144,11 @@ func (api ProviderAPI) List(ctx context.Context) ([]Provider, error) {
 
 // Show returns one provider by name.
 func (api ProviderAPI) Show(ctx context.Context, name string) (Provider, error) {
-	_ = ctx
-	file, _, err := providers.LoadOrInit(api.path())
+	store := api.store()
+	if err := store.ImportProvidersJSON(ctx, api.path()); err != nil {
+		return Provider{}, err
+	}
+	file, err := store.ListProviders(ctx)
 	if err != nil {
 		return Provider{}, err
 	}
@@ -139,17 +161,8 @@ func (api ProviderAPI) Show(ctx context.Context, name string) (Provider, error) 
 
 // Add inserts a new provider.
 func (api ProviderAPI) Add(ctx context.Context, input ProviderInput) (Provider, error) {
-	_ = ctx
-	path := api.path()
-	file, _, err := providers.LoadOrInit(path)
-	if err != nil {
-		return Provider{}, err
-	}
 	endpoint := endpointFromInput(input)
-	if err := providers.Add(&file, input.Name, endpoint); err != nil {
-		return Provider{}, err
-	}
-	if err := providers.Save(path, file); err != nil {
+	if err := api.store().AddProvider(ctx, input.Name, endpoint); err != nil {
 		return Provider{}, err
 	}
 	return providerFromEndpoint(input.Name, endpoint, api.getenv()), nil
@@ -157,12 +170,6 @@ func (api ProviderAPI) Add(ctx context.Context, input ProviderInput) (Provider, 
 
 // Update applies a sparse provider patch.
 func (api ProviderAPI) Update(ctx context.Context, name string, patch ProviderPatch) (Provider, error) {
-	_ = ctx
-	path := api.path()
-	file, _, err := providers.LoadOrInit(path)
-	if err != nil {
-		return Provider{}, err
-	}
 	providerPatch := providers.Patch{
 		Endpoint:        patch.Endpoint,
 		APIKeyEnv:       patch.APIKeyEnv,
@@ -177,10 +184,12 @@ func (api ProviderAPI) Update(ctx context.Context, name string, patch ProviderPa
 	if patch.SupportedClient != nil {
 		providerPatch.Clients = &providers.ListPatch{Op: providers.ListOpReplace, Items: splitClients(*patch.SupportedClient)}
 	}
-	if err := providers.Update(&file, name, providerPatch); err != nil {
+	store := api.store()
+	if err := store.UpdateProvider(ctx, name, providerPatch); err != nil {
 		return Provider{}, err
 	}
-	if err := providers.Save(path, file); err != nil {
+	file, err := store.ListProviders(ctx)
+	if err != nil {
 		return Provider{}, err
 	}
 	return providerFromEndpoint(name, file.Endpoints[name], api.getenv()), nil
@@ -188,33 +197,20 @@ func (api ProviderAPI) Update(ctx context.Context, name string, patch ProviderPa
 
 // Remove deletes a provider.
 func (api ProviderAPI) Remove(ctx context.Context, name string) (OperationResult, error) {
-	_ = ctx
-	path := api.path()
-	file, _, err := providers.LoadOrInit(path)
-	if err != nil {
-		return OperationResult{}, err
-	}
-	if !providers.Remove(&file, name) {
+	if !api.store().RemoveProvider(ctx, name) {
 		return OperationResult{}, fmt.Errorf("provider %q not found: %w", name, providers.ErrNotFound)
 	}
-	if err := providers.Save(path, file); err != nil {
-		return OperationResult{}, err
-	}
-	return OperationResult{OK: true, Message: fmt.Sprintf("Removed provider %q", name), Path: path}, nil
+	return OperationResult{OK: true, Message: fmt.Sprintf("Removed provider %q", name), Path: api.dbPath()}, nil
 }
 
 // SetEnabled toggles a provider's enabled state.
 func (api ProviderAPI) SetEnabled(ctx context.Context, name string, enabled bool) (Provider, error) {
-	_ = ctx
-	path := api.path()
-	file, _, err := providers.LoadOrInit(path)
+	store := api.store()
+	if err := store.SetProviderEnabled(ctx, name, enabled); err != nil {
+		return Provider{}, err
+	}
+	file, err := store.ListProviders(ctx)
 	if err != nil {
-		return Provider{}, err
-	}
-	if err := providers.SetEnabled(&file, name, enabled); err != nil {
-		return Provider{}, err
-	}
-	if err := providers.Save(path, file); err != nil {
 		return Provider{}, err
 	}
 	return providerFromEndpoint(name, file.Endpoints[name], api.getenv()), nil
@@ -222,16 +218,12 @@ func (api ProviderAPI) SetEnabled(ctx context.Context, name string, enabled bool
 
 // Rename changes a provider key.
 func (api ProviderAPI) Rename(ctx context.Context, oldName, newName string) (Provider, error) {
-	_ = ctx
-	path := api.path()
-	file, _, err := providers.LoadOrInit(path)
+	store := api.store()
+	if err := store.RenameProvider(ctx, oldName, newName); err != nil {
+		return Provider{}, err
+	}
+	file, err := store.ListProviders(ctx)
 	if err != nil {
-		return Provider{}, err
-	}
-	if err := providers.Rename(&file, oldName, newName); err != nil {
-		return Provider{}, err
-	}
-	if err := providers.Save(path, file); err != nil {
 		return Provider{}, err
 	}
 	return providerFromEndpoint(newName, file.Endpoints[newName], api.getenv()), nil
@@ -239,8 +231,11 @@ func (api ProviderAPI) Rename(ctx context.Context, oldName, newName string) (Pro
 
 // ResolveModels resolves static or dynamically discovered models for a provider.
 func (api ProviderAPI) ResolveModels(ctx context.Context, name string) ([]string, error) {
-	_ = ctx
-	file, _, err := providers.LoadOrInit(api.path())
+	store := api.store()
+	if err := store.ImportProvidersJSON(ctx, api.path()); err != nil {
+		return nil, err
+	}
+	file, err := store.ListProviders(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +245,6 @@ func (api ProviderAPI) ResolveModels(ctx context.Context, name string) ([]string
 	}
 	return providers.ResolveModels(endpoint, name, api.cacheTTL(), filepath.Join(pathutil.CacheDir(), "models"), api.getenv())
 }
-
 func providerFromEndpoint(name string, endpoint providers.Endpoint, getenv func(string) string) Provider {
 	return Provider{
 		Name:            name,

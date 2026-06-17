@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/chat2anyllm/code-agent-manager/internal/appapi"
 	"github.com/chat2anyllm/code-agent-manager/internal/doctor"
-	"github.com/chat2anyllm/code-agent-manager/internal/providers"
 	"github.com/chat2anyllm/code-agent-manager/internal/ui"
 )
 
@@ -28,7 +28,7 @@ func (a *App) doctorCommand(state *globalState) *cobra.Command {
 			printer := ui.New(out, cmd.ErrOrStderr())
 
 			// --- legacy summary header (preserves existing test assertions).
-			file, providersErr := providers.Load(state.providersPath)
+			file, providersErr := appapi.ProviderAPI{ProvidersPath: state.providersPath}.File(context.Background())
 			if providersErr == nil {
 				names := file.SortedNames()
 				fmt.Fprintf(out, "Providers: %d\n", len(names))

@@ -2,7 +2,6 @@ package appapi
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,20 +17,11 @@ func TestProviderAPIInitListShow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Init error = %v", err)
 	}
-	if !result.OK || result.Message == "" || result.Path != path {
-		t.Fatalf("Init result = %+v, want ok message and path", result)
+	if !result.OK || result.Message == "" || result.Path != path+".db" {
+		t.Fatalf("Init result = %+v, want ok message and db path", result)
 	}
-
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("providers file missing: %v", err)
-	}
-	parsed := map[string]any{}
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		t.Fatalf("providers json invalid: %v", err)
-	}
-	if _, ok := parsed["endpoints"]; !ok {
-		t.Fatalf("providers file missing endpoints: %s", raw)
+	if _, err := os.Stat(result.Path); err != nil {
+		t.Fatalf("db file missing: %v", err)
 	}
 
 	file := providers.File{Endpoints: map[string]providers.Endpoint{

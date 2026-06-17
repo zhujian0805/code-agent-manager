@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/chat2anyllm/code-agent-manager/internal/appapi"
 	"github.com/chat2anyllm/code-agent-manager/internal/providers"
 )
 
@@ -31,7 +33,7 @@ func handleEndpointsShortCircuit(cmd *cobra.Command, state *globalState) error {
 	if state.endpoints == "" {
 		return nil
 	}
-	file, err := providers.Load(state.providersPath)
+	file, err := appapi.ProviderAPI{ProvidersPath: state.providersPath}.File(context.Background())
 	if err != nil {
 		return err
 	}
