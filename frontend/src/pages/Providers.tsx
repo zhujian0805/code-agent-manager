@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../services/api'
 import type { Provider } from '../services/types'
-import { Page } from './Dashboard'
+import { Page } from './Page'
 
 export function Providers() {
   const [providers, setProviders] = useState<Provider[]>([])

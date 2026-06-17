@@ -1,1 +1,154 @@
-:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033;background:#f6f8fb}body{margin:0}button,input,select{font:inherit}button{border:1px solid #d5dce8;background:#fff;border-radius:10px;padding:.55rem .8rem;cursor:pointer}button:hover{background:#eef4ff}.primary,.active{background:#2563eb!important;color:#fff!important;border-color:#2563eb!important}.app-shell{display:flex;min-height:100vh}.sidebar{width:240px;background:#0f172a;color:#dbeafe;padding:1rem;box-sizing:border-box}.brand{display:flex;align-items:center;gap:.6rem;font-weight:800;margin-bottom:1.5rem;color:#fff}.sidebar nav{display:grid;gap:.35rem}.sidebar button{display:flex;align-items:center;gap:.55rem;color:#dbeafe;background:transparent;border-color:transparent;text-align:left}.sidebar button:hover{background:#1e293b}.content{flex:1;padding:1.25rem 1.75rem}.page header h1{margin:.2rem 0;font-size:2rem}.page header p{color:#64748b;margin-top:.25rem}.card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:1rem;margin:.85rem 0;box-shadow:0 1px 3px #0f172a12}.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem}.command-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem}.command-card{background:#0f172a;color:#e2e8f0;border:1px solid #1e3a8a;border-radius:18px;padding:1rem;display:grid;gap:.75rem;box-shadow:0 18px 45px #0f172a22}.command-card h2{margin:0;color:#fff}.command-card p{margin:.2rem 0;color:#bfdbfe}.command-card code{display:block;background:#020617;color:#93c5fd;border:1px solid #1d4ed8;padding:.75rem;border-radius:12px;white-space:normal}.command-card small{color:#94a3b8}.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:1rem}.form-grid label{display:grid;gap:.35rem;font-weight:650}.inline-form{display:flex;gap:.6rem;flex-wrap:wrap}.inline-form input{min-width:210px}input,select{border:1px solid #cbd5e1;border-radius:10px;padding:.55rem;background:#fff}.actions{display:flex;gap:.6rem;margin:1rem 0}table{width:100%;border-collapse:collapse;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0}th,td{text-align:left;border-bottom:1px solid #e2e8f0;padding:.8rem}th{background:#f8fafc;color:#334155}.toast{background:#ecfeff;border:1px solid #67e8f9;border-radius:12px;padding:.75rem;margin-bottom:1rem}.message.pass{color:#15803d}.message.warn{color:#b45309}.message.fail{color:#b91c1c}.error-text{color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:.65rem .8rem}code{background:#f1f5f9;padding:.1rem .3rem;border-radius:6px}@media(max-width:800px){.app-shell{display:block}.sidebar{width:auto}.sidebar nav{grid-template-columns:repeat(2,1fr)}}
+:root{
+  font-family:"Aptos","Segoe UI Variable","Segoe UI",ui-sans-serif,system-ui,sans-serif;
+}
+
+/* Theme tokens ported from ~/repos/wintoolbox Themes/{Dark,Light}Theme.xaml.
+   Same semantic keys, swapped by the [data-theme] attribute on <html>. */
+:root,
+[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0a0a0a;            /* PrimaryBackground */
+  --bg-2:#141414;          /* SecondaryBackground */
+  --card:#1e1e1e;          /* CardBackground */
+  --sidebar:#0f0f0f;       /* SidebarBackground */
+  --header:#0f0f0f;        /* HeaderBackground */
+  --line:#2a2a2a;          /* BorderColor */
+  --divider:#333333;       /* DividerColor */
+  --accent:#007aff;        /* AccentColor */
+  --accent-hover:#0056cc;  /* AccentHoverColor */
+  --success:#34c759;       /* SuccessColor */
+  --warning:#ff9500;       /* WarningColor */
+  --error:#ff3b30;         /* ErrorColor */
+  --text:#ffffff;          /* PrimaryText */
+  --muted:#cccccc;         /* SecondaryText */
+  --tertiary:#999999;      /* TertiaryText */
+  --disabled:#666666;      /* DisabledText */
+  --hover:#1c1c1c;
+  --shadow:0 24px 80px #000a;
+  --code-bg:#000000;
+}
+[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f5f5f7;
+  --bg-2:#eeeef0;
+  --card:#ffffff;
+  --sidebar:#f0f0f2;
+  --header:#f0f0f2;
+  --line:#d1d1d6;
+  --divider:#d1d1d6;
+  --accent:#007aff;
+  --accent-hover:#0056cc;
+  --success:#34c759;
+  --warning:#ff9500;
+  --error:#ff3b30;
+  --text:#1d1d1f;
+  --muted:#6e6e73;
+  --tertiary:#86868b;
+  --disabled:#aeaeb2;
+  --hover:#e8e8ec;
+  --shadow:0 18px 60px #0002;
+  --code-bg:#f0f0f2;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);min-height:100vh}
+button,input,select{font:inherit;color:inherit}
+
+button{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:.6rem .9rem;cursor:pointer;color:var(--text);transition:background .16s ease,border-color .16s ease,color .16s ease}
+button:hover{background:var(--hover);border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.primary,.active{background:var(--accent)!important;color:#fff!important;border-color:var(--accent)!important}
+.primary:hover,.active:hover{background:var(--accent-hover)!important}
+
+.app-shell{display:flex;min-height:100vh;background:var(--bg)}
+.sidebar{width:264px;background:var(--sidebar);color:var(--text);padding:1rem;border-right:1px solid var(--line);box-sizing:border-box;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:.7rem;font-weight:800;letter-spacing:.01em;margin-bottom:1.6rem;color:var(--text)}
+.brand svg{color:var(--accent)}
+.sidebar nav{display:grid;gap:.2rem}
+.sidebar button{width:100%;display:flex;align-items:center;gap:.7rem;color:var(--muted);background:transparent;border-color:transparent;text-align:left;border-radius:8px;padding:.6rem .7rem}
+.sidebar button:hover{background:var(--hover);border-color:transparent;color:var(--text)}
+.sidebar button.active{background:var(--hover)!important;color:var(--text)!important;border-color:transparent!important}
+.sidebar .spacer{flex:1}
+.theme-toggle{margin-top:.4rem;border-top:1px solid var(--divider);padding-top:.6rem}
+
+.content{flex:1;padding:1.8rem 2.4rem;color:var(--text);background:var(--bg-2)}
+.page{max-width:1500px;margin:0 auto}
+.page header{margin-bottom:1.4rem}
+.page header h1{margin:.1rem 0;font-size:clamp(1.8rem,3vw,2.6rem);line-height:1.05;letter-spacing:-.02em;color:var(--text)}
+.page header p{color:var(--muted);font-size:1.02rem;margin-top:.5rem;max-width:920px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:1rem;margin:.85rem 0;box-shadow:var(--shadow)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem}
+.cards .card{position:relative;overflow:hidden}
+.cards .card h2{margin-top:.2rem;font-size:1.05rem;color:var(--text)}
+.cards .card p{color:var(--muted)}
+.cards .card small{color:var(--tertiary)}
+
+.command-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}
+.command-card{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:1.1rem;display:grid;gap:.85rem;box-shadow:var(--shadow)}
+.command-card h2{margin:0;color:var(--text);text-transform:uppercase;letter-spacing:.05em;font-size:1rem}
+.command-card p{margin:.2rem 0;color:var(--muted)}
+.command-card code{display:block;background:var(--code-bg);color:var(--accent);border:1px solid var(--line);padding:.8rem;border-radius:12px;white-space:normal;font-family:"Cascadia Code","JetBrains Mono",ui-monospace,monospace}
+.command-card small{color:var(--tertiary)}
+
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:1rem;box-shadow:var(--shadow)}
+.form-grid label{display:grid;gap:.4rem;font-weight:600;color:var(--muted)}
+.inline-form{display:flex;gap:.7rem;flex-wrap:wrap;margin:.5rem 0 1.2rem}
+.inline-form input{min-width:240px}
+input,select{border:1px solid var(--line);border-radius:10px;padding:.6rem;background:var(--card);color:var(--text);outline:none}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+.actions{display:flex;gap:.7rem;margin:1rem 0}
+
+table{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow)}
+th,td{text-align:left;border-bottom:1px solid var(--divider);padding:.85rem}
+th{background:var(--bg-2);color:var(--muted);text-transform:uppercase;font-size:.78rem;letter-spacing:.06em}
+td{color:var(--text)}
+
+.toast{background:color-mix(in srgb,var(--accent) 14%,var(--card));border:1px solid var(--accent);color:var(--text);border-radius:12px;padding:.8rem;margin-bottom:1rem}
+.message.pass{color:var(--success)}.message.warn{color:var(--warning)}.message.fail{color:var(--error)}
+.error-text{color:var(--error);background:color-mix(in srgb,var(--error) 12%,var(--card));border:1px solid var(--error);border-radius:10px;padding:.7rem .85rem}
+code{background:var(--code-bg);color:var(--accent);padding:.12rem .34rem;border-radius:6px}
+
+.badges{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0}
+.badge{font-size:.72rem;font-weight:600;padding:.2rem .55rem;border-radius:999px;letter-spacing:.02em}
+.badge-installed{background:color-mix(in srgb,var(--success) 18%,var(--card));border:1px solid var(--success);color:var(--success)}
+.badge-not-installed{background:var(--bg-2);border:1px solid var(--line);color:var(--tertiary)}
+.status-line{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--card));border:1px solid var(--accent);border-radius:10px;padding:.6rem .85rem;margin:.5rem 0 1rem}
+
+.pagination{display:flex;align-items:center;gap:1rem;justify-content:center;margin:1.5rem 0;color:var(--muted)}
+.agent-picker{display:flex;flex-wrap:wrap;gap:.4rem;margin:.6rem 0}
+.agent-chip{display:inline-flex;align-items:center;gap:.3rem;font-size:.74rem;padding:.22rem .5rem;border-radius:999px;border:1px solid var(--line);background:var(--bg-2);color:var(--muted);cursor:pointer;user-select:none}
+.agent-chip input{margin:0;width:auto;min-width:0}
+.agent-chip.selected{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--card));color:var(--accent)}
+.agent-chip.installed{border-color:var(--success)}
+
+/* Compact card header: title on the left, expand/collapse link on the right. */
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem}
+.card-head h2{margin-top:.2rem}
+.card-desc{margin:.3rem 0 .5rem}
+.link-button{background:transparent;border:none;color:var(--accent);padding:.1rem .2rem;font-size:.82rem;cursor:pointer;white-space:nowrap}
+.link-button:hover{background:transparent;border:none;text-decoration:underline}
+
+/* Collapsible install-target picker keeps the card compact while leaving the
+   full agent list one click away (and in the DOM for accessibility). */
+.agent-picker-details{margin:.4rem 0}
+.agent-picker-details>summary{cursor:pointer;color:var(--muted);font-size:.82rem;user-select:none;list-style:revert}
+.agent-picker-details[open]>summary{color:var(--text);margin-bottom:.2rem}
+
+/* Filter toggle in the search row (e.g. "Installed only"). */
+.filter-toggle{display:inline-flex;align-items:center;gap:.4rem;color:var(--muted);font-size:.88rem;cursor:pointer;user-select:none}
+.filter-toggle input{width:auto;min-width:0;margin:0}
+
+/* Expanded detail panel: indexed metadata table + rendered manifest content. */
+.detail-panel{margin-top:.8rem;border-top:1px solid var(--divider);padding-top:.7rem}
+.detail-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.4rem .9rem;margin:0 0 .6rem}
+.detail-meta div{display:flex;flex-direction:column;gap:.1rem;min-width:0}
+.detail-meta dt{color:var(--tertiary);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em}
+.detail-meta dd{margin:0;color:var(--text);font-size:.85rem;overflow-wrap:anywhere}
+.detail-content{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:.8rem;max-height:380px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-family:"Cascadia Code","JetBrains Mono",ui-monospace,monospace;font-size:.8rem;color:var(--muted);margin:.4rem 0 0}
+
+/* Sidebar footer groups the language and theme toggles. */
+.sidebar-footer{margin-top:.4rem;border-top:1px solid var(--divider);padding-top:.6rem;display:grid;gap:.2rem}
+
+@media(max-width:900px){.app-shell{display:block}.sidebar{width:auto}.sidebar nav{grid-template-columns:repeat(2,1fr)}.content{padding:1rem}.page header h1{font-size:1.8rem}}

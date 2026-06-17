@@ -1,46 +1,68 @@
 import { useState } from 'react'
-import { Activity, Bot, FileCog, FileText, HeartPulse, Home, Plug, Puzzle, Settings as SettingsIcon, Server, Sparkles } from 'lucide-react'
-import { Dashboard } from './pages/Dashboard'
+import { Activity, Bot, FileCog, FileText, HeartPulse, Languages, Moon, Plug, Puzzle, Settings as SettingsIcon, Server, Sparkles, Sun, Users } from 'lucide-react'
+import { Agents } from './pages/Agents'
 import { Providers } from './pages/Providers'
 import { MCP } from './pages/MCP'
 import { Library } from './pages/Library'
 import { Configuration } from './pages/Configuration'
 import { Diagnostics } from './pages/Diagnostics'
 import { Settings } from './pages/Settings'
+import { useTheme } from './services/theme'
+import { LanguageProvider, useLanguage } from './services/i18n'
 
-type Route = 'dashboard' | 'providers' | 'mcp' | 'prompts' | 'skills' | 'agents' | 'plugins' | 'config' | 'diagnostics' | 'settings'
+type Route = 'agents' | 'providers' | 'mcp' | 'prompts' | 'skills' | 'subagents' | 'plugins' | 'config' | 'diagnostics' | 'settings'
 
-const nav: { route: Route; label: string; icon: typeof Home }[] = [
-  { route: 'dashboard', label: 'Launch', icon: Home },
-  { route: 'providers', label: 'Providers', icon: Server },
-  { route: 'mcp', label: 'MCP Servers', icon: Plug },
-  { route: 'prompts', label: 'Prompts', icon: FileText },
-  { route: 'skills', label: 'Skills', icon: Sparkles },
-  { route: 'agents', label: 'Agents', icon: Bot },
-  { route: 'plugins', label: 'Plugins', icon: Puzzle },
-  { route: 'config', label: 'Configuration', icon: FileCog },
-  { route: 'diagnostics', label: 'Diagnostics', icon: HeartPulse },
-  { route: 'settings', label: 'Settings', icon: SettingsIcon },
+const nav: { route: Route; labelKey: string; icon: typeof Bot }[] = [
+  { route: 'agents', labelKey: 'nav.agents', icon: Bot },
+  { route: 'providers', labelKey: 'nav.providers', icon: Server },
+  { route: 'mcp', labelKey: 'nav.mcp', icon: Plug },
+  { route: 'prompts', labelKey: 'nav.prompts', icon: FileText },
+  { route: 'skills', labelKey: 'nav.skills', icon: Sparkles },
+  { route: 'subagents', labelKey: 'nav.subagents', icon: Users },
+  { route: 'plugins', labelKey: 'nav.plugins', icon: Puzzle },
+  { route: 'config', labelKey: 'nav.config', icon: FileCog },
+  { route: 'diagnostics', labelKey: 'nav.diagnostics', icon: HeartPulse },
+  { route: 'settings', labelKey: 'nav.settings', icon: SettingsIcon },
 ]
 
-export function App() {
-  const [route, setRoute] = useState<Route>('dashboard')
+function Shell() {
+  const [route, setRoute] = useState<Route>('agents')
+  const { theme, toggle } = useTheme()
+  const { t, language, toggle: toggleLanguage } = useLanguage()
 
   return <div className="app-shell">
-    <aside className="sidebar"><div className="brand"><Activity /> <span>CAM Desktop</span></div><nav>{nav.map((item) => { const Icon = item.icon; return <button key={item.route} className={route === item.route ? 'active' : ''} onClick={() => setRoute(item.route)}><Icon size={18} />{item.label}</button> })}</nav></aside>
+    <aside className="sidebar">
+      <div className="brand"><Activity /> <span>{t('brand')}</span></div>
+      <nav>{nav.map((item) => { const Icon = item.icon; return <button key={item.route} className={route === item.route ? 'active' : ''} onClick={() => setRoute(item.route)}><Icon size={18} />{t(item.labelKey)}</button> })}</nav>
+      <div className="spacer" />
+      <div className="sidebar-footer">
+        <button onClick={toggleLanguage} aria-label="Toggle language" lang={language === 'en' ? 'zh' : 'en'}>
+          <Languages size={18} />
+          {t('lang.toggle')}
+        </button>
+        <button onClick={toggle} aria-label="Toggle theme">
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          {theme === 'dark' ? t('theme.light') : t('theme.dark')}
+        </button>
+      </div>
+    </aside>
     <div className="content">
-      {route === 'dashboard' && <Dashboard />}
+      {route === 'agents' && <Agents />}
       {route === 'providers' && <Providers />}
       {route === 'mcp' && <MCP />}
       {route === 'prompts' && <Library kind="prompt" />}
       {route === 'skills' && <Library kind="skill" />}
-      {route === 'agents' && <Library kind="agent" />}
+      {route === 'subagents' && <Library kind="agent" />}
       {route === 'plugins' && <Library kind="plugin" />}
       {route === 'config' && <Configuration />}
       {route === 'diagnostics' && <Diagnostics />}
       {route === 'settings' && <Settings />}
     </div>
   </div>
+}
+
+export function App() {
+  return <LanguageProvider><Shell /></LanguageProvider>
 }
 
 export default App

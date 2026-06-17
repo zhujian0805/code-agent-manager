@@ -75,3 +75,37 @@ export type LaunchPlan = {
   args: string[]
   environment: Record<string, string>
 }
+
+export type MetadataItem = {
+  kind: string
+  name: string
+  description: string
+  install_key: string
+  repo_owner: string
+  repo_name: string
+  repo_branch: string
+  target_apps: string
+  installed_apps?: string[]
+  installed: boolean
+}
+
+export type MetadataSearchResponse = {
+  items: MetadataItem[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export type MetadataDetail = {
+  item: MetadataItem
+  content: string
+  manifest_path: string
+}
+
+export type MetadataRefreshSummary = {
+  sources_scanned: number
+  items_added: number
+  items_updated: number
+  items_stale: number
+  failed_sources: string[]
+}

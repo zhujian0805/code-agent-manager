@@ -3,7 +3,15 @@
     "owner": "ComposioHQ",
     "name": "awesome-claude-skills",
     "branch": "main",
-    "enabled": true
+    "enabled": true,
+    "catalogFile": "FULL-SKILLS.md"
+  },
+  "Chat2AnyLLM/awesome-claude-skills": {
+    "owner": "Chat2AnyLLM",
+    "name": "awesome-claude-skills",
+    "branch": "main",
+    "enabled": true,
+    "catalogFile": "FULL-SKILLS.md"
   },
   "obra/superpowers": {
     "owner": "obra",

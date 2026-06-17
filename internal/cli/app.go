@@ -102,6 +102,7 @@ func (a *App) rootCommand() *cobra.Command {
 	root.AddCommand(a.managementCommand("skill", "s", state))
 	root.AddCommand(a.managementCommand("plugin", "pl", state))
 	root.AddCommand(a.mcpCommand(state))
+	root.AddCommand(a.metadataCommand(state))
 	root.AddCommand(a.extensionsCommand())
 	root.AddCommand(a.lifecycleCommand("upgrade", "u"))
 	root.AddCommand(a.lifecycleCommand("install", "i"))

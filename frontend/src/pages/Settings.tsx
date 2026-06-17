@@ -1,4 +1,4 @@
-import { Page } from './Dashboard'
+import { Page } from './Page'
 
 export function Settings() {
   return <Page title="Settings" description="Configure desktop preferences and view application metadata.">

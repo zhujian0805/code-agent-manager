@@ -5,10 +5,10 @@
 //  1. Bundled JSON embedded in the binary — always loaded first as a fallback.
 //  2. config.yaml sources (in order):
 //     - type: local  → read the JSON file at the expanded path.
-//       Local entries override everything already loaded (bundled + earlier).
+//     Local entries override everything already loaded (bundled + earlier).
 //     - type: remote → fetch the JSON URL (with a disk cache governed by
-//       cache.ttl_seconds).  Remote entries only fill gaps — they never
-//       override keys already provided by a local source.
+//     cache.ttl_seconds).  Remote entries only fill gaps — they never
+//     override keys already provided by a local source.
 //
 // The result is a merged map of RepoEntry values keyed by their JSON key
 // (typically "owner/name" for skills/agents, or a slug for plugins).
@@ -44,14 +44,15 @@ var bundledPromptRepos []byte
 // RepoEntry is a single repository definition.  Field names match the JSON
 // keys used in the Python version so the same files work for both.
 type RepoEntry struct {
-	Owner      string   `json:"owner,omitempty"`
-	Name       string   `json:"name,omitempty"`
-	Branch     string   `json:"branch,omitempty"`
-	Enabled    *bool    `json:"enabled,omitempty"`
-	SkillsPath string   `json:"skillsPath,omitempty"`
-	AgentsPath string   `json:"agentsPath,omitempty"`
-	PluginPath string   `json:"pluginPath,omitempty"`
-	Exclude    []string `json:"exclude,omitempty"`
+	Owner       string   `json:"owner,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	Branch      string   `json:"branch,omitempty"`
+	Enabled     *bool    `json:"enabled,omitempty"`
+	SkillsPath  string   `json:"skillsPath,omitempty"`
+	AgentsPath  string   `json:"agentsPath,omitempty"`
+	PluginPath  string   `json:"pluginPath,omitempty"`
+	CatalogFile string   `json:"catalogFile,omitempty"`
+	Exclude     []string `json:"exclude,omitempty"`
 
 	// Plugin-specific fields.
 	Description string   `json:"description,omitempty"`
@@ -120,10 +121,10 @@ func (r RepoEntry) SubPath(kind entities.Kind) string {
 //  1. Bundled JSON embedded in the binary (lowest priority, fallback).
 //  2. Iterate every source in config.yaml repositories.<kind>s.sources:
 //     - type: local  → read the JSON file at the expanded path.
-//       Local entries override everything already loaded.
+//     Local entries override everything already loaded.
 //     - type: remote → fetch the URL (with disk cache).
-//       Remote entries only fill gaps — they do NOT override keys that
-//       a local source already provided.
+//     Remote entries only fill gaps — they do NOT override keys that
+//     a local source already provided.
 //
 // If config.yaml has no sources or cannot be loaded, only the bundled
 // entries are returned.

@@ -22,6 +22,9 @@ func TestBundledSkillRepos(t *testing.T) {
 	if _, ok := repos["obra/superpowers"]; !ok {
 		t.Error("expected obra/superpowers in bundled skill repos")
 	}
+	if got := repos["Chat2AnyLLM/awesome-claude-skills"].CatalogFile; got != "FULL-SKILLS.md" {
+		t.Errorf("expected Chat2AnyLLM/awesome-claude-skills catalogFile FULL-SKILLS.md, got %q", got)
+	}
 }
 
 func TestBundledAgentRepos(t *testing.T) {
@@ -160,6 +163,28 @@ func TestParseRepoJSON(t *testing.T) {
 	r := repos["my-org/my-repo"]
 	if r.Owner != "my-org" || r.Name != "my-repo" {
 		t.Errorf("unexpected owner/name: %q/%q", r.Owner, r.Name)
+	}
+	if r.CatalogFile != "" {
+		t.Errorf("unexpected catalog file: %q", r.CatalogFile)
+	}
+}
+
+func TestParseRepoJSONCatalogFile(t *testing.T) {
+	input := `{
+		"my-org/catalog": {
+			"owner": "my-org",
+			"name": "catalog",
+			"branch": "main",
+			"enabled": true,
+			"catalogFile": "FULL-SKILLS.md"
+		}
+	}`
+	repos, err := parseRepoJSON([]byte(input))
+	if err != nil {
+		t.Fatalf("parseRepoJSON: %v", err)
+	}
+	if got := repos["my-org/catalog"].CatalogFile; got != "FULL-SKILLS.md" {
+		t.Fatalf("CatalogFile = %q, want FULL-SKILLS.md", got)
 	}
 }
 

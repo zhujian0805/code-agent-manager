@@ -1,5 +1,5 @@
-import { mockConfigFiles, mockDoctorChecks, mockEntities, mockMCPClients, mockMCPServers, mockProviders, mockTools } from './mockData'
-import type { ConfigFile, DoctorCheck, Entity, LaunchPlan, MCPClient, MCPServer, Provider, Tool } from './types'
+import { mockConfigFiles, mockDoctorChecks, mockEntities, mockMCPClients, mockMCPServers, mockMetadataItems, mockProviders, mockTargets, mockTools } from './mockData'
+import type { ConfigFile, DoctorCheck, Entity, LaunchPlan, MCPClient, MCPServer, MetadataDetail, MetadataRefreshSummary, MetadataSearchResponse, Provider, Tool } from './types'
 
 type SidecarConfig = {
   baseUrl: string
@@ -84,5 +84,33 @@ export const api = {
   },
   async dryRun(tool: string, provider: string, model: string): Promise<LaunchPlan> {
     return (await request<LaunchPlan>('/api/launch/dry-run', { method: 'POST', body: JSON.stringify({ tool, provider, model, args: [] }) })) ?? { tool: mockTools[0], provider: mockProviders[0], model, command: tool, args: ['--model', model], environment: { CAM_PROVIDER: provider } }
+  },
+  async searchMetadata(kind: Entity['kind'], query: string, limit = 50, offset = 0): Promise<MetadataSearchResponse> {
+    const params = new URLSearchParams({ type: kind, q: query, limit: String(limit), offset: String(offset) })
+    const resp = await request<MetadataSearchResponse>(`/api/metadata/search?${params.toString()}`)
+    if (resp) return resp
+    // Browser-only fallback: filter mock items server-side style.
+    const q = query.trim().toLowerCase()
+    const filtered = mockMetadataItems.filter((item) => item.kind === kind && (q === '' || `${item.name} ${item.description} ${item.repo_owner}/${item.repo_name}`.toLowerCase().includes(q)))
+    return { items: filtered.slice(offset, offset + limit), total: filtered.length, limit, offset }
+  },
+  async refreshMetadata(): Promise<MetadataRefreshSummary> {
+    return (await request<MetadataRefreshSummary>('/api/metadata/refresh', { method: 'POST' })) ?? { sources_scanned: 3, items_added: mockMetadataItems.length, items_updated: 0, items_stale: 0, failed_sources: [] }
+  },
+  async installMetadata(kind: string, installKey: string, targetApps: string[]): Promise<{ status: string }> {
+    return (await request<{ status: string }>('/api/metadata/install', { method: 'POST', body: JSON.stringify({ kind, install_key: installKey, target_apps: targetApps }) })) ?? { status: 'installed' }
+  },
+  async metadataTargets(kind: string): Promise<string[]> {
+    return (await request<string[]>(`/api/metadata/targets?kind=${encodeURIComponent(kind)}`)) ?? mockTargets[kind] ?? ['claude']
+  },
+  async metadataDetail(kind: string, installKey: string): Promise<MetadataDetail> {
+    const params = new URLSearchParams({ kind, install_key: installKey })
+    const resp = await request<MetadataDetail>(`/api/metadata/detail?${params.toString()}`)
+    if (resp) return resp
+    // Browser-only fallback: synthesize a detail view from the mock index so the
+    // expand panel renders without a sidecar.
+    const item = mockMetadataItems.find((entry) => entry.kind === kind && entry.install_key === installKey)
+      ?? { kind, name: installKey, description: '', install_key: installKey, repo_owner: '', repo_name: '', repo_branch: 'main', target_apps: '', installed_apps: [], installed: false }
+    return { item, content: `# ${item.name}\n\n${item.description}`, manifest_path: '' }
   },
 }

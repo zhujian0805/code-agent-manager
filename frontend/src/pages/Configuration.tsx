@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../services/api'
 import type { ConfigFile } from '../services/types'
-import { Page } from './Dashboard'
+import { Page } from './Page'
 
 export function Configuration() {
   const [files, setFiles] = useState<ConfigFile[]>([])
