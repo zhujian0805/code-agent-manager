@@ -2,7 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../services/api'
 import type { Entity, MetadataItem, MetadataDetail } from '../services/types'
 import { Page } from './Page'
+import { ExpandableTable, type Column } from '../components/ExpandableTable'
+import { MultiSelect } from '../components/MultiSelect'
 import { useLanguage } from '../services/i18n'
+
+// Build the GitHub URL for an indexed resource. The metadata index stores only
+// owner/name/branch, so the source repo is reconstructed as a github.com link
+// (optionally pinned to the indexed branch when it isn't the default "main").
+function repoUrl(owner: string, name: string, branch: string): string {
+  const base = `https://github.com/${owner}/${name}`
+  return branch && branch !== 'main' ? `${base}/tree/${branch}` : base
+}
 
 // Each kind maps to its own i18n title/description keys. The "agent" kind is
 // labelled "Subagents" in the UI to distinguish installable subagent resources
@@ -122,6 +132,22 @@ export function Library({ kind }: LibraryProps) {
   // than issuing a server-side query (the index has no installed filter yet).
   const visibleItems = installedOnly ? items.filter((item) => (item.installed_apps ?? []).length > 0) : items
 
+  const columns: Column<MetadataItem>[] = [
+    { header: 'Name', cell: (item) => <h3 className="row-name">{item.name}</h3> },
+    { header: 'Repo', cell: (item) => (
+      <a className="repo-link" href={repoUrl(item.repo_owner, item.repo_name, item.repo_branch)} target="_blank" rel="noopener noreferrer" title={`Open ${item.repo_owner}/${item.repo_name} on GitHub`}>
+        {item.repo_owner}/{item.repo_name}{item.repo_branch && item.repo_branch !== 'main' ? `@${item.repo_branch}` : ''}
+      </a>
+    ) },
+    { header: 'Status', cell: (item) => {
+      const installedApps = item.installed_apps ?? []
+      return installedApps.length > 0
+        ? <div className="badges" aria-label={t('library.installedAgents')}>{installedApps.map((app) => <span key={app} className="badge badge-installed">{app}</span>)}</div>
+        : <div className="badges"><span className="badge badge-not-installed">{t('library.notInstalled')}</span></div>
+    } },
+    { header: 'Actions', cell: (item) => <ResourceActions item={item} targets={targets} onInstall={installTo} /> },
+  ]
+
   return <Page title={title} description={t(descriptionKeys[kind])}>
     <div className="inline-form">
       <input aria-label={`${title} ${t('library.search')}`} value={query} onChange={(event) => { setQuery(event.target.value); setOffset(0) }} placeholder={t('library.searchPlaceholder', { kind: kindLabel })} />
@@ -133,10 +159,19 @@ export function Library({ kind }: LibraryProps) {
       </label>
     </div>
     {status && <p className="status-line" role="status">{status}</p>}
-    <div className="cards">
-      {visibleItems.length === 0 && !loading && <p>{t('library.empty', { kind: kindLabel })}</p>}
-      {visibleItems.map((item) => <ResourceCard key={`${item.kind}-${item.install_key}`} item={item} targets={targets} onInstall={installTo} />)}
-    </div>
+    <ExpandableTable
+      ariaLabel={title}
+      columns={columns}
+      rows={visibleItems}
+      rowKey={(item) => `${item.kind}-${item.install_key}`}
+      empty={!loading ? <p>{t('library.empty', { kind: kindLabel })}</p> : undefined}
+      renderExpanded={(item) => (
+        <div className="detail-panel">
+          <p className="card-desc">{item.description || t('library.noDescription')}</p>
+          <DetailPanel item={item} />
+        </div>
+      )}
+    />
     {pageCount > 1 && (
       <nav className="pagination" aria-label="pagination">
         <button onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))} disabled={offset === 0 || loading}>{t('library.previous')}</button>
@@ -147,22 +182,21 @@ export function Library({ kind }: LibraryProps) {
   </Page>
 }
 
-type ResourceCardProps = {
+type ResourceActionsProps = {
   item: MetadataItem
   targets: string[]
   onInstall: (item: MetadataItem, apps: string[]) => Promise<void>
 }
 
-function ResourceCard({ item, targets, onInstall }: ResourceCardProps) {
+// ResourceActions renders the install-target picker and install button inside a
+// table row's Actions cell. The picker is a collapsed <details> so the full
+// agent list stays one click away (and in the DOM for accessibility) without
+// making the row tall.
+function ResourceActions({ item, targets, onInstall }: ResourceActionsProps) {
   const { t } = useLanguage()
   const installedApps = item.installed_apps ?? []
   const [selected, setSelected] = useState<string[]>([])
   const [installing, setInstalling] = useState(false)
-  const [expanded, setExpanded] = useState(false)
-
-  function toggle(app: string) {
-    setSelected((current) => current.includes(app) ? current.filter((a) => a !== app) : [...current, app])
-  }
 
   async function doInstall() {
     const apps = selected.length > 0 ? selected : ['claude']
@@ -183,37 +217,23 @@ function ResourceCard({ item, targets, onInstall }: ResourceCardProps) {
       ? t('library.installToCount', { count: selected.length })
       : t('library.installTo', { target: selected[0] ?? 'claude' })
 
-  return <article className="card">
-    <div className="card-head">
-      <h2>{item.name}</h2>
-      <button className="link-button" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
-        {expanded ? t('library.collapse') : t('library.expand')}
-      </button>
+  return (
+    <div className="row-actions">
+      <MultiSelect
+        options={targets.map((app) => ({ value: app, label: app, installed: installedApps.includes(app) }))}
+        value={selected}
+        onChange={setSelected}
+        placeholder={t('library.selectTargets')}
+        triggerAriaLabel={t('library.selectAgentsFor', { name: item.name })}
+        listboxAriaLabel={t('library.installTargets', { name: item.name })}
+      />
+      <button className="primary" onClick={doInstall} disabled={installing}>{installLabel}</button>
     </div>
-    <p className="card-desc">{item.description || t('library.noDescription')}</p>
-    <small>{item.repo_owner}/{item.repo_name}{item.repo_branch && item.repo_branch !== 'main' ? `@${item.repo_branch}` : ''}</small>
-    {installedApps.length > 0
-      ? <div className="badges" aria-label={t('library.installedAgents')}>{installedApps.map((app) => <span key={app} className="badge badge-installed">{app}</span>)}</div>
-      : <div className="badges"><span className="badge badge-not-installed">{t('library.notInstalled')}</span></div>}
-    <details className="agent-picker-details">
-      <summary>{t('library.selectTargets')}{selected.length > 0 ? ` (${selected.length})` : ''}</summary>
-      <div className="agent-picker" aria-label={t('library.installTargets', { name: item.name })}>
-        {targets.map((app) => {
-          const isInstalled = installedApps.includes(app)
-          return <label key={app} className={`agent-chip${selected.includes(app) ? ' selected' : ''}${isInstalled ? ' installed' : ''}`}>
-            <input type="checkbox" checked={selected.includes(app)} onChange={() => toggle(app)} aria-label={`${app}${isInstalled ? ' (installed)' : ''}`} />
-            {app}{isInstalled ? ' ✓' : ''}
-          </label>
-        })}
-      </div>
-    </details>
-    <button className="primary" onClick={doInstall} disabled={installing}>{installLabel}</button>
-    {expanded && <DetailPanel item={item} />}
-  </article>
+  )
 }
 
 // DetailPanel lazily fetches the item's full metadata and manifest content the
-// first time a card is expanded, then renders the manifest (SKILL.md/AGENT.md/
+// first time a row is expanded, then renders the manifest (SKILL.md/AGENT.md/
 // plugin.json) below the indexed fields. Fetch is on-demand because it hits the
 // network for the source repo; collapsing and re-expanding reuses the result.
 function DetailPanel({ item }: { item: MetadataItem }) {
@@ -236,7 +256,7 @@ function DetailPanel({ item }: { item: MetadataItem }) {
   return <section className="detail-panel" aria-label={`details for ${item.name}`}>
     <dl className="detail-meta">
       <div><dt>kind</dt><dd>{item.kind}</dd></div>
-      <div><dt>repo</dt><dd>{item.repo_owner}/{item.repo_name}</dd></div>
+      <div><dt>repo</dt><dd><a className="repo-link" href={repoUrl(item.repo_owner, item.repo_name, item.repo_branch)} target="_blank" rel="noopener noreferrer">{item.repo_owner}/{item.repo_name}</a></dd></div>
       <div><dt>branch</dt><dd>{item.repo_branch || 'main'}</dd></div>
       <div><dt>install key</dt><dd><code>{item.install_key}</code></dd></div>
       <div><dt>targets</dt><dd>{item.target_apps}</dd></div>

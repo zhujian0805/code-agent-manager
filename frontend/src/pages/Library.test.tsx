@@ -68,7 +68,8 @@ describe('Library page', () => {
   it('offers a per-resource agent picker with multiple targets', async () => {
     render(<Library kind="skill" />)
     expect(await screen.findByText(/golang-testing/i)).toBeInTheDocument()
-    // The picker exposes multiple installable agents, not just claude.
+    // The dropdown trigger is unique per resource; open it to expose the options.
+    fireEvent.click(await screen.findByRole('button', { name: /select agents for golang-testing/i }))
     const picker = await screen.findByLabelText(/install targets for golang-testing/i)
     expect(picker).toBeInTheDocument()
     expect(within(picker).getByLabelText(/^codex/i)).toBeInTheDocument()

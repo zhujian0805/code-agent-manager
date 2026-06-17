@@ -16,6 +16,14 @@ type DiscoveredResource struct {
 	RelPath        string // path of the resource directory/file relative to repo root
 	ManifestRel    string // path of the manifest file relative to repo root
 	InstallKeyName string // optional stable key suffix when catalog rows share a name
+	// Source attribution for catalog rows whose name cell links to the real
+	// source repo (e.g. awesome-list catalogs that only point at other repos).
+	// When set, the indexed item is attributed to this repo instead of the
+	// catalog repo so it merges with a direct scan of the source repo.
+	SourceOwner  string
+	SourceRepo   string
+	SourceBranch string
+	SourcePath   string
 }
 
 // DiscoverResources walks an extracted repository tree rooted at root and

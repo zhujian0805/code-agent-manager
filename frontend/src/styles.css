@@ -101,9 +101,24 @@ input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-m
 .actions{display:flex;gap:.7rem;margin:1rem 0}
 
 table{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow)}
-th,td{text-align:left;border-bottom:1px solid var(--divider);padding:.85rem}
+th,td{text-align:left;border-bottom:1px solid var(--divider);padding:.85rem;vertical-align:middle}
 th{background:var(--bg-2);color:var(--muted);text-transform:uppercase;font-size:.78rem;letter-spacing:.06em}
 td{color:var(--text)}
+
+/* Expandable table: a chevron column drives per-row expand/collapse. The detail
+   row spans every column and sits directly under its parent. */
+.expandable-row td{vertical-align:middle}
+.col-toggle{width:2.5rem;text-align:center;white-space:nowrap}
+.row-toggle{background:transparent;border:none;padding:.3rem;color:var(--muted);cursor:pointer;border-radius:8px;display:inline-flex;align-items:center;justify-content:center}
+.row-toggle:hover{background:var(--hover);color:var(--text)}
+.expanded-detail-row>td{background:var(--bg-2);border-bottom:1px solid var(--divider);padding:1rem 1.2rem}
+.expanded-detail-row .detail-panel{margin-top:0;border-top:none;padding-top:0}
+.expanded-detail-row dl.detail-meta{margin-top:0}
+.row-actions{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+.row-meta{display:grid;gap:.3rem;margin:0 0 .6rem}
+.row-meta dt{color:var(--tertiary);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}
+.row-meta dd{margin:0;color:var(--text);font-size:.9rem;overflow-wrap:anywhere}
+.row-name{margin:0;font-size:1rem;font-weight:700;color:var(--text)}
 
 .toast{background:color-mix(in srgb,var(--accent) 14%,var(--card));border:1px solid var(--accent);color:var(--text);border-radius:12px;padding:.8rem;margin-bottom:1rem}
 .message.pass{color:var(--success)}.message.warn{color:var(--warning)}.message.fail{color:var(--error)}
@@ -117,11 +132,29 @@ code{background:var(--code-bg);color:var(--accent);padding:.12rem .34rem;border-
 .status-line{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--card));border:1px solid var(--accent);border-radius:10px;padding:.6rem .85rem;margin:.5rem 0 1rem}
 
 .pagination{display:flex;align-items:center;gap:1rem;justify-content:center;margin:1.5rem 0;color:var(--muted)}
-.agent-picker{display:flex;flex-wrap:wrap;gap:.4rem;margin:.6rem 0}
-.agent-chip{display:inline-flex;align-items:center;gap:.3rem;font-size:.74rem;padding:.22rem .5rem;border-radius:999px;border:1px solid var(--line);background:var(--bg-2);color:var(--muted);cursor:pointer;user-select:none}
-.agent-chip input{margin:0;width:auto;min-width:0}
-.agent-chip.selected{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--card));color:var(--accent)}
-.agent-chip.installed{border-color:var(--success)}
+
+/* Multi-select dropdown. The panel is position:fixed (sized from the trigger
+   rect in JS) so it floats above the table and isn't clipped by its
+   overflow:hidden, and so it can flip above the trigger when space is tight. */
+.multiselect{position:relative;display:inline-block}
+.multiselect-trigger{display:inline-flex;align-items:center;gap:.4rem;padding:.4rem .7rem;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:.82rem;cursor:pointer;user-select:none;white-space:nowrap}
+.multiselect-trigger:hover{background:var(--hover);border-color:var(--accent);color:var(--text)}
+.multiselect-trigger.open{border-color:var(--accent);color:var(--text)}
+.multiselect-trigger-label{font-weight:600}
+.multiselect-caret{transition:transform .16s ease;flex:none}
+.multiselect-caret.flipped{transform:rotate(180deg)}
+.multiselect-panel{z-index:1000;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:.35rem;max-height:280px;overflow:auto;display:flex;flex-direction:column;gap:.1rem}
+.multiselect-option{display:flex;align-items:center;gap:.45rem;padding:.35rem .5rem;border-radius:8px;font-size:.84rem;color:var(--muted);cursor:pointer;user-select:none}
+.multiselect-option:hover{background:var(--hover);color:var(--text)}
+.multiselect-option input{margin:0;width:auto;min-width:0}
+.multiselect-option-label{flex:1;min-width:0;overflow-wrap:anywhere}
+.multiselect-option.checked{color:var(--accent)}
+.multiselect-option.installed .multiselect-installed{color:var(--success);font-weight:700}
+.multiselect-installed{flex:none}
+
+/* Clickable source-repo link in the Repo column and detail panel. */
+.repo-link{color:var(--accent);font-size:.82rem;text-decoration:none;border-bottom:1px solid transparent;overflow-wrap:anywhere}
+.repo-link:hover{text-decoration:underline;border-bottom-color:var(--accent)}
 
 /* Compact card header: title on the left, expand/collapse link on the right. */
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem}
@@ -129,12 +162,6 @@ code{background:var(--code-bg);color:var(--accent);padding:.12rem .34rem;border-
 .card-desc{margin:.3rem 0 .5rem}
 .link-button{background:transparent;border:none;color:var(--accent);padding:.1rem .2rem;font-size:.82rem;cursor:pointer;white-space:nowrap}
 .link-button:hover{background:transparent;border:none;text-decoration:underline}
-
-/* Collapsible install-target picker keeps the card compact while leaving the
-   full agent list one click away (and in the DOM for accessibility). */
-.agent-picker-details{margin:.4rem 0}
-.agent-picker-details>summary{cursor:pointer;color:var(--muted);font-size:.82rem;user-select:none;list-style:revert}
-.agent-picker-details[open]>summary{color:var(--text);margin-bottom:.2rem}
 
 /* Filter toggle in the search row (e.g. "Installed only"). */
 .filter-toggle{display:inline-flex;align-items:center;gap:.4rem;color:var(--muted);font-size:.88rem;cursor:pointer;user-select:none}

@@ -43,6 +43,12 @@ func catalogCandidates(kind entities.Kind) []string {
 	plural := string(kind) + "s"
 	upper := strings.ToUpper(plural)
 	lower := strings.ToLower(plural)
+	// Only auto-discover generated catalog files (FULL-SKILLS.md, FULL-PLUGINS.md,
+	// …). README.md is intentionally excluded: a repo's README routinely contains
+	// documentation tables (feature lists, command tables) that are not resource
+	// catalogs, and parsing them produced garbage entries like "Smart Detection" or
+	// "/janitor-report". A repo that genuinely wants its README parsed as a catalog
+	// sets catalogFile: "README.md" explicitly, which bypasses this inference.
 	return []string{
 		"FULL-" + upper + ".md",
 		"FULL-" + lower + ".md",
@@ -50,8 +56,6 @@ func catalogCandidates(kind entities.Kind) []string {
 		"FULL_" + lower + ".md",
 		"FULL-" + string(kind) + ".md",
 		"FULL_" + string(kind) + ".md",
-		"README.md",
-		"readme.md",
 	}
 }
 
@@ -96,13 +100,23 @@ func parseCatalogMarkdown(content, relPath string, kind entities.Kind) []Discove
 				desc = cleanCatalogCell(cells[descIdx])
 			}
 			seen[key] = true
-			out = append(out, DiscoveredResource{
-				Name:           name,
-				Description:    desc,
-				RelPath:        relPath,
-				ManifestRel:    relPath,
+			res := DiscoveredResource{
+				Name:        name,
+				Description: desc,
+				RelPath:     relPath,
+				ManifestRel: relPath,
 				InstallKeyName: catalogInstallKeyName(name, source),
-			})
+			}
+			// Attribute the row to its real source repo when the name link points
+			// at one, so awesome-list "pointer" catalogs don't duplicate the skills
+			// they merely list.
+			if owner, repo, branch, path, ok := parseGithubSource(source); ok {
+				res.SourceOwner = owner
+				res.SourceRepo = repo
+				res.SourceBranch = branch
+				res.SourcePath = path
+			}
+			out = append(out, res)
 		}
 		i++
 	}
@@ -198,28 +212,77 @@ func catalogInstallKeyName(name, source string) string {
 	if source == "" {
 		return name
 	}
-	owner, repo, ok := githubRepoFromURL(source)
+	owner, repo, _, _, ok := parseGithubSource(source)
 	if !ok {
 		return name
 	}
 	return owner + "/" + repo + ":" + name
 }
 
-func githubRepoFromURL(raw string) (owner, repo string, ok bool) {
+// parseGithubSource extracts owner, repo, branch and in-repo path from a GitHub
+// URL or "owner/repo" shorthand. It supports the permalink, tree, and blob
+// forms used by awesome-list catalogs:
+//
+//	https://github.com/owner/repo
+//	https://github.com/owner/repo/tree/main/skills/foo
+//	https://github.com/owner/repo/blob/main/skills/foo/SKILL.md
+//	owner/repo
+//	owner/repo@branch
+//
+// branch and path are empty when the source carries neither.
+func parseGithubSource(raw string) (owner, repo, branch, path string, ok bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", "", false
+		return "", "", "", "", false
 	}
-	raw = strings.TrimPrefix(raw, "https://")
-	raw = strings.TrimPrefix(raw, "http://")
-	raw = strings.TrimPrefix(raw, "www.")
-	if !strings.HasPrefix(strings.ToLower(raw), "github.com/") {
-		return "", "", false
+	s := raw
+	s = strings.TrimPrefix(s, "https://")
+	s = strings.TrimPrefix(s, "http://")
+	s = strings.TrimPrefix(s, "www.")
+
+	if !strings.HasPrefix(strings.ToLower(s), "github.com/") {
+		// Shorthand "owner/repo" or "owner/repo@branch".
+		owner, repo, branch, path, ok = parseShorthandSource(s)
+		return owner, repo, branch, path, ok
 	}
-	parts := strings.Split(strings.TrimPrefix(raw, "github.com/"), "/")
+
+	rest := strings.TrimPrefix(s, "github.com/")
+	rest = strings.TrimSuffix(rest, ".git")
+	parts := strings.Split(rest, "/")
 	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", false
+		return "", "", "", "", false
 	}
-	repo = strings.TrimSuffix(parts[1], ".git")
-	return parts[0], repo, true
+	owner, repo = parts[0], parts[1]
+	// parts[2] is "tree"/"blob"/"commit"; parts[3] is the ref; parts[4:] is the path.
+	if len(parts) >= 4 && (strings.EqualFold(parts[2], "tree") || strings.EqualFold(parts[2], "blob") || strings.EqualFold(parts[2], "commit")) {
+		branch = parts[3]
+		if len(parts) > 4 {
+			path = strings.Join(parts[4:], "/")
+		}
+	} else if len(parts) > 2 {
+		path = strings.Join(parts[2:], "/")
+	}
+	return owner, repo, branch, path, true
+}
+
+// parseShorthandSource handles "owner/repo" and "owner/repo@branch" forms.
+func parseShorthandSource(s string) (owner, repo, branch, path string, ok bool) {
+	if at := strings.Index(s, "@"); at >= 0 {
+		branch = s[at+1:]
+		s = s[:at]
+	}
+	parts := strings.Split(s, "/")
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", "", "", false
+	}
+	// A GitHub owner/repo has no dots; if the first segment looks like a
+	// hostname (e.g. "example.com/a"), this isn't a GitHub source.
+	if strings.Contains(parts[0], ".") {
+		return "", "", "", "", false
+	}
+	owner, repo = parts[0], parts[1]
+	if len(parts) > 2 {
+		path = strings.Join(parts[2:], "/")
+	}
+	return owner, repo, branch, path, true
 }

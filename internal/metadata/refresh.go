@@ -271,15 +271,30 @@ func (svc *Service) fetchAndDiscover(ctx context.Context, kind string, entityKin
 				}
 				items := make([]Item, 0, len(resources))
 				for _, res := range resources {
+					// Catalog rows that link to a real source repo are attributed to
+					// that repo (not the catalog/awesome-list repo). This is what stops
+					// awesome-list "pointer" catalogs from duplicating skills already
+					// indexed by a direct scan: both produce the same install key
+					// (sourceOwner/sourceRepo:name) and merge on the unique constraint.
+					owner, repo, branch, itemPath := job.owner, job.repo, job.branch, res.RelPath
+					if res.SourceOwner != "" && res.SourceRepo != "" {
+						owner, repo = res.SourceOwner, res.SourceRepo
+						if res.SourceBranch != "" {
+							branch = res.SourceBranch
+						}
+						if res.SourcePath != "" {
+							itemPath = res.SourcePath
+						}
+					}
 					items = append(items, Item{
 						Kind:        kind,
 						Name:        res.Name,
 						Description: res.Description,
-						RepoOwner:   job.owner,
-						RepoName:    job.repo,
-						RepoBranch:  job.branch,
-						ItemPath:    res.RelPath,
-						InstallKey:  fmt.Sprintf("%s/%s:%s", job.owner, job.repo, resourceInstallKeyName(res)),
+						RepoOwner:   owner,
+						RepoName:    repo,
+						RepoBranch:  branch,
+						ItemPath:    itemPath,
+						InstallKey:  fmt.Sprintf("%s/%s:%s", owner, repo, res.Name),
 						TargetApps:  targetApps,
 					})
 				}
@@ -294,13 +309,6 @@ func (svc *Service) fetchAndDiscover(ctx context.Context, kind string, entityKin
 		close(out)
 	}()
 	return out
-}
-
-func resourceInstallKeyName(res DiscoveredResource) string {
-	if res.InstallKeyName != "" {
-		return res.InstallKeyName
-	}
-	return res.Name
 }
 
 // Install installs an item from the metadata index into one target app. The

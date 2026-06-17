@@ -147,7 +147,40 @@ func (s *Store) DeleteStale(ctx context.Context, kind, before string) (int, erro
 	return int(n), nil
 }
 
-// Search queries the metadata_items table with LIKE matching.
+// itemColumns is the canonical column list selected from metadata_items.
+const itemColumns = `id, kind, name, description, source_id, repo_owner, repo_name, repo_branch,
+       item_path, install_key, target_apps, metadata_json, installed, installed_targets,
+       last_seen_at, created_at, updated_at`
+
+// canonicalOrder ranks candidate rows that share a name so that the
+// ROW_NUMBER()=1 pick is a sensible "source of truth". Lower sorts first:
+//
+//  1. Non-catalog repos beat awesome-list/catalog repos (repo_name LIKE
+//     'awesome-%') — a catalog/awesome-list repo is never the chosen source
+//     when a real copy exists.
+//  2. Official Anthropic repos beat community repos.
+//  3. Shorter in-repo paths beat deeply nested ones.
+//  4. repo_owner/repo_name as a stable alphabetical tiebreak.
+const canonicalOrder = `CASE WHEN repo_name LIKE 'awesome-%' THEN 1 ELSE 0 END,
+				CASE WHEN repo_owner = 'anthropics' THEN 0 ELSE 1 END,
+				length(item_path),
+				repo_owner, repo_name`
+
+// matchPredicate builds the WHERE clause (without the leading "WHERE") for a
+// search, optionally narrowed by kind.
+func matchPredicate(withKind bool) string {
+	pred := "(name LIKE ? OR description LIKE ? OR repo_owner LIKE ? OR repo_name LIKE ? OR install_key LIKE ?)"
+	if withKind {
+		return "kind = ? AND " + pred
+	}
+	return pred
+}
+
+// Search queries the metadata_items table with LIKE matching. Results are
+// deduplicated by name (case-insensitive): when the same name exists in
+// several repos, only the canonical source is returned (see canonicalOrder).
+// Install status is unaffected because InstalledAppsFor detects installs by
+// on-disk directory name, independent of repo.
 func (s *Store) Search(ctx context.Context, q SearchQuery) ([]Item, error) {
 	if err := s.Init(ctx); err != nil {
 		return nil, err
@@ -164,26 +197,23 @@ func (s *Store) Search(ctx context.Context, q SearchQuery) ([]Item, error) {
 	}
 	pattern := "%" + q.Query + "%"
 
-	var rows *sql.Rows
-	if q.Kind != "" {
-		rows, err = db.QueryContext(ctx, `
-			SELECT id, kind, name, description, source_id, repo_owner, repo_name, repo_branch,
-			       item_path, install_key, target_apps, metadata_json, installed, installed_targets,
-			       last_seen_at, created_at, updated_at
-			FROM metadata_items
-			WHERE kind = ? AND (name LIKE ? OR description LIKE ? OR repo_owner LIKE ? OR repo_name LIKE ? OR install_key LIKE ?)
-			ORDER BY name LIMIT ? OFFSET ?`,
-			q.Kind, pattern, pattern, pattern, pattern, pattern, limit, q.Offset)
-	} else {
-		rows, err = db.QueryContext(ctx, `
-			SELECT id, kind, name, description, source_id, repo_owner, repo_name, repo_branch,
-			       item_path, install_key, target_apps, metadata_json, installed, installed_targets,
-			       last_seen_at, created_at, updated_at
-			FROM metadata_items
-			WHERE name LIKE ? OR description LIKE ? OR repo_owner LIKE ? OR repo_name LIKE ? OR install_key LIKE ?
-			ORDER BY name LIMIT ? OFFSET ?`,
-			pattern, pattern, pattern, pattern, pattern, limit, q.Offset)
+	withKind := q.Kind != ""
+	args := []any{pattern, pattern, pattern, pattern, pattern}
+	if withKind {
+		args = append([]any{q.Kind}, args...)
 	}
+	args = append(args, limit, q.Offset)
+
+	rows, err := db.QueryContext(ctx, `
+		WITH ranked AS (
+			SELECT `+itemColumns+`,
+			       ROW_NUMBER() OVER (PARTITION BY lower(name) ORDER BY `+canonicalOrder+`) AS rn
+			FROM metadata_items
+			WHERE `+matchPredicate(withKind)+`
+		)
+		SELECT `+itemColumns+` FROM ranked WHERE rn = 1
+		ORDER BY name LIMIT ? OFFSET ?`,
+		args...)
 	if err != nil {
 		return nil, fmt.Errorf("metadata: search: %w", err)
 	}
@@ -191,7 +221,8 @@ func (s *Store) Search(ctx context.Context, q SearchQuery) ([]Item, error) {
 	return scanItems(rows)
 }
 
-// Count returns the number of items matching the query (ignoring limit/offset).
+// Count returns the number of deduplicated names matching the query (ignoring
+// limit/offset), so the total matches what Search can display.
 func (s *Store) Count(ctx context.Context, q SearchQuery) (int, error) {
 	if err := s.Init(ctx); err != nil {
 		return 0, err
@@ -203,18 +234,18 @@ func (s *Store) Count(ctx context.Context, q SearchQuery) (int, error) {
 	defer db.Close()
 
 	pattern := "%" + q.Query + "%"
-	var count int
-	if q.Kind != "" {
-		err = db.QueryRowContext(ctx, `
-			SELECT COUNT(*) FROM metadata_items
-			WHERE kind = ? AND (name LIKE ? OR description LIKE ? OR repo_owner LIKE ? OR repo_name LIKE ? OR install_key LIKE ?)`,
-			q.Kind, pattern, pattern, pattern, pattern, pattern).Scan(&count)
-	} else {
-		err = db.QueryRowContext(ctx, `
-			SELECT COUNT(*) FROM metadata_items
-			WHERE name LIKE ? OR description LIKE ? OR repo_owner LIKE ? OR repo_name LIKE ? OR install_key LIKE ?`,
-			pattern, pattern, pattern, pattern, pattern).Scan(&count)
+	withKind := q.Kind != ""
+	args := []any{pattern, pattern, pattern, pattern, pattern}
+	if withKind {
+		args = append([]any{q.Kind}, args...)
 	}
+
+	var count int
+	err = db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM (
+			SELECT DISTINCT lower(name) FROM metadata_items WHERE `+matchPredicate(withKind)+`
+		)`,
+		args...).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("metadata: count: %w", err)
 	}

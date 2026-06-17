@@ -120,6 +120,79 @@ func TestSearchPagination(t *testing.T) {
 	}
 }
 
+// upsertSkill is a small helper for the dedup tests below.
+func upsertSkill(t *testing.T, ctx context.Context, s *Store, name, owner, repo, installKey string) {
+	t.Helper()
+	if err := s.UpsertItem(ctx, Item{
+		Kind:       "skill",
+		Name:       name,
+		RepoOwner:  owner,
+		RepoName:   repo,
+		InstallKey: installKey,
+	}); err != nil {
+		t.Fatalf("UpsertItem %s: %v", installKey, err)
+	}
+}
+
+func TestSearchDeduplicatesByName(t *testing.T) {
+	ctx := context.Background()
+	s := NewStore(filepath.Join(t.TempDir(), "cam.db"))
+	s.Init(ctx)
+
+	// Same name in two real repos: only one row should be returned.
+	upsertSkill(t, ctx, s, "shared-skill", "davila7", "claude-code-templates", "davila7/claude-code-templates:shared-skill")
+	upsertSkill(t, ctx, s, "shared-skill", "daymade", "claude-code-skills", "daymade/claude-code-skills:shared-skill")
+
+	results, err := s.Search(ctx, SearchQuery{Query: "shared-skill", Kind: "skill"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 deduplicated result, got %d: %+v", len(results), results)
+	}
+	total, _ := s.Count(ctx, SearchQuery{Query: "shared-skill", Kind: "skill"})
+	if total != 1 {
+		t.Fatalf("expected count 1 for deduplicated name, got %d", total)
+	}
+}
+
+func TestSearchPrefersOfficialOverCatalogRepo(t *testing.T) {
+	ctx := context.Background()
+	s := NewStore(filepath.Join(t.TempDir(), "cam.db"))
+	s.Init(ctx)
+
+	// A catalog/awesome-list repo must never be the chosen source when a real
+	// copy exists. Here the official anthropics copy should win.
+	upsertSkill(t, ctx, s, "xlsx", "anthropics", "skills", "anthropics/skills:xlsx")
+	upsertSkill(t, ctx, s, "xlsx", "Chat2AnyLLM", "awesome-claude-skills", "Chat2AnyLLM/awesome-claude-skills:xlsx")
+
+	results, _ := s.Search(ctx, SearchQuery{Query: "xlsx", Kind: "skill"})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].RepoOwner != "anthropics" || results[0].RepoName != "skills" {
+		t.Fatalf("expected canonical anthropics/skills, got %s/%s", results[0].RepoOwner, results[0].RepoName)
+	}
+}
+
+func TestSearchPrefersNonCatalogRepoOverCatalogRepo(t *testing.T) {
+	ctx := context.Background()
+	s := NewStore(filepath.Join(t.TempDir(), "cam.db"))
+	s.Init(ctx)
+
+	// Neither is official, but one is a catalog repo (awesome-*). The real repo wins.
+	upsertSkill(t, ctx, s, "skill-creator", "daymade", "claude-code-skills", "daymade/claude-code-skills:skill-creator")
+	upsertSkill(t, ctx, s, "skill-creator", "ComposioHQ", "awesome-claude-skills", "ComposioHQ/awesome-claude-skills:skill-creator")
+
+	results, _ := s.Search(ctx, SearchQuery{Query: "skill-creator", Kind: "skill"})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].RepoName == "awesome-claude-skills" {
+		t.Fatalf("catalog repo must not be the chosen source, got %s/%s", results[0].RepoOwner, results[0].RepoName)
+	}
+}
+
 func TestSearchPagedWithInstalledApps(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

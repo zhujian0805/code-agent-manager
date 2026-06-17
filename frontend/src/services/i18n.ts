@@ -18,6 +18,17 @@ const en: Record<string, string> = {
   'theme.light': 'Light mode',
   'theme.dark': 'Dark mode',
 
+  // Generic table expand/collapse affordance
+  'table.details': 'Details',
+  'table.hideDetails': 'Hide details',
+
+  // Providers page
+  'providers.apiKeyEnv': 'API key env',
+  'providers.apiKeyEnvHint': 'Name of the env var holding the key (e.g. OPENAI_API_KEY)',
+  'providers.maskedKey': 'API key',
+  'providers.clients': 'Clients',
+  'providers.description': 'Description',
+
   // Navigation
   'nav.agents': 'Agents',
   'nav.providers': 'Providers',
@@ -36,6 +47,7 @@ const en: Record<string, string> = {
   'agents.detected': 'Detected: {version}',
   'agents.notDetected': 'Not detected on PATH',
   'agents.installedResources': 'Installed resources',
+  'agents.provider': 'Provider',
 
   // Library (prompts/skills/subagents/plugins) pages
   'library.prompts.title': 'Prompts',
@@ -60,6 +72,7 @@ const en: Record<string, string> = {
   'library.installToCount': 'Install to {count} agents',
   'library.installing': 'Installing…',
   'library.selectTargets': 'Select agents',
+  'library.selectAgentsFor': 'Select agents for {name}',
   'library.expand': 'Details',
   'library.collapse': 'Hide details',
   'library.loadingDetail': 'Loading details…',
@@ -75,6 +88,17 @@ const zh: Record<string, string> = {
   'lang.toggle': 'English',
   'theme.light': '浅色模式',
   'theme.dark': '深色模式',
+
+  // Generic table expand/collapse affordance
+  'table.details': '详情',
+  'table.hideDetails': '隐藏详情',
+
+  // Providers page
+  'providers.apiKeyEnv': 'API 密钥环境变量',
+  'providers.apiKeyEnvHint': '存放密钥的环境变量名（例如 OPENAI_API_KEY）',
+  'providers.maskedKey': 'API 密钥',
+  'providers.clients': '客户端',
+  'providers.description': '描述',
 
   // Navigation
   'nav.agents': '智能体',
@@ -94,6 +118,7 @@ const zh: Record<string, string> = {
   'agents.detected': '已检测：{version}',
   'agents.notDetected': '未在 PATH 中检测到',
   'agents.installedResources': '已安装资源',
+  'agents.provider': '服务商',
 
   // Library pages
   'library.prompts.title': '提示词',
@@ -118,6 +143,7 @@ const zh: Record<string, string> = {
   'library.installToCount': '安装到 {count} 个智能体',
   'library.installing': '安装中…',
   'library.selectTargets': '选择智能体',
+  'library.selectAgentsFor': '为 {name} 选择智能体',
   'library.expand': '详情',
   'library.collapse': '隐藏详情',
   'library.loadingDetail': '正在加载详情…',

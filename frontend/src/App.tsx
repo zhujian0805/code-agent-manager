@@ -13,8 +13,8 @@ import { LanguageProvider, useLanguage } from './services/i18n'
 type Route = 'agents' | 'providers' | 'mcp' | 'prompts' | 'skills' | 'subagents' | 'plugins' | 'config' | 'diagnostics' | 'settings'
 
 const nav: { route: Route; labelKey: string; icon: typeof Bot }[] = [
-  { route: 'agents', labelKey: 'nav.agents', icon: Bot },
   { route: 'providers', labelKey: 'nav.providers', icon: Server },
+  { route: 'agents', labelKey: 'nav.agents', icon: Bot },
   { route: 'mcp', labelKey: 'nav.mcp', icon: Plug },
   { route: 'prompts', labelKey: 'nav.prompts', icon: FileText },
   { route: 'skills', labelKey: 'nav.skills', icon: Sparkles },
