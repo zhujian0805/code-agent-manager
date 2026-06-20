@@ -69,6 +69,18 @@ export function MCP() {
     }
   }
 
+  async function uninstallFrom(item: MCPRegistryItem, clients: string[]) {
+    setStatus('')
+    try {
+      await api.uninstallMCPServer(item.name, clients)
+      setStatus(t('mcp.uninstalled', { name: item.name, targets: clients.join(', ') }))
+      await load(query)
+    } catch (err) {
+      setStatus(t('mcp.uninstallFailed', { error: err instanceof Error ? err.message : String(err) }))
+      throw err
+    }
+  }
+
   // "Installed only" narrows the current view to servers already installed in at
   // least one client, mirroring Library's installed-only toggle.
   const visibleItems = installedOnly ? items.filter((item) => (item.installedClients ?? []).length > 0) : items
@@ -97,7 +109,7 @@ export function MCP() {
         ? <div className="badges" aria-label={t('mcp.installedClients')}>{installedClients.map((app) => <span key={app} className="badge badge-installed">{app}</span>)}</div>
         : <div className="badges"><span className="badge badge-not-installed">{t('mcp.notInstalled')}</span></div>
     } },
-    { header: 'Actions', cell: (item) => <MCPActions item={item} targets={targets} onInstall={installTo} /> },
+    { header: 'Actions', cell: (item) => <MCPActions item={item} targets={targets} onInstall={installTo} onUninstall={uninstallFrom} /> },
   ]
 
   return <Page title={t('mcp.title')} description={t('mcp.description')}>
@@ -143,11 +155,12 @@ type MCPActionsProps = {
   item: MCPRegistryItem
   targets: string[]
   onInstall: (item: MCPRegistryItem, clients: string[]) => Promise<void>
+  onUninstall: (item: MCPRegistryItem, clients: string[]) => Promise<void>
 }
 
-// MCPActions renders the install-target picker and install button inside a row's
-// Actions cell, mirroring Library's ResourceActions.
-function MCPActions({ item, targets, onInstall }: MCPActionsProps) {
+// MCPActions renders the install-target picker and install/uninstall buttons
+// inside a row's Actions cell, mirroring Library's ResourceActions.
+function MCPActions({ item, targets, onInstall, onUninstall }: MCPActionsProps) {
   const { t } = useLanguage()
   const installedClients = item.installedClients ?? []
   const [selected, setSelected] = useState<string[]>([])
@@ -158,6 +171,20 @@ function MCPActions({ item, targets, onInstall }: MCPActionsProps) {
     setInstalling(true)
     try {
       await onInstall(item, clients)
+      setSelected([])
+    } catch {
+      // status surfaced by parent
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  async function doUninstall() {
+    const clients = selected.length > 0 ? selected : installedClients
+    if (clients.length === 0) return
+    setInstalling(true)
+    try {
+      await onUninstall(item, clients)
       setSelected([])
     } catch {
       // status surfaced by parent
@@ -183,6 +210,9 @@ function MCPActions({ item, targets, onInstall }: MCPActionsProps) {
         listboxAriaLabel={t('mcp.installTargets', { name: item.name })}
       />
       <button className="primary" onClick={doInstall} disabled={installing}>{installLabel}</button>
+      {installedClients.length > 0 && (
+        <button className="danger" onClick={doUninstall} disabled={installing}>{t('mcp.uninstall')}</button>
+      )}
     </div>
   )
 }

@@ -106,6 +106,41 @@ func (s *Server) handleMetadataInstall(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, map[string]any{"status": "installed", "install_key": input.InstallKey, "targets": targets}, err)
 }
 
+// handleMetadataUninstall removes an entity from the specified apps and clears
+// the installed status in the metadata store.
+func (s *Server) handleMetadataUninstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var input struct {
+		Kind       string   `json:"kind"`
+		InstallKey string   `json:"install_key"`
+		TargetApps []string `json:"target_apps"`
+	}
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if input.Kind == "" {
+		writeError(w, http.StatusBadRequest, "kind is required")
+		return
+	}
+	if input.InstallKey == "" {
+		writeError(w, http.StatusBadRequest, "install_key is required")
+		return
+	}
+	targets := input.TargetApps
+	if len(targets) == 0 {
+		writeError(w, http.StatusBadRequest, "no target agents specified")
+		return
+	}
+	store := metadata.NewStore("")
+	svc := metadata.NewService(store)
+	err := svc.UninstallFromTargets(context.Background(), input.Kind, input.InstallKey, targets)
+	writeResult(w, map[string]any{"status": "uninstalled", "install_key": input.InstallKey, "targets": targets}, err)
+}
+
 func (s *Server) handleMetadataTargets(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)

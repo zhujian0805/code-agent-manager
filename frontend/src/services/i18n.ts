@@ -94,6 +94,9 @@ const en: Record<string, string> = {
   'library.pagination': 'Page {current} of {total} ({count} total)',
   'library.previous': 'Previous',
   'library.next': 'Next',
+  'library.uninstall': 'Uninstall',
+  'library.uninstalled': 'Uninstalled {name} from {targets}',
+  'library.uninstallFailed': 'Uninstall failed: {error}',
 
   // MCP Servers page (mirrors the Library layout: discovered registry servers
   // with a per-row install-target dropdown)
@@ -117,6 +120,9 @@ const en: Record<string, string> = {
   'mcp.installed': 'Installed {name} to {targets}',
   'mcp.installFailed': 'Install failed: {error}',
   'mcp.searchFailed': 'Search failed: {error}',
+  'mcp.uninstall': 'Uninstall',
+  'mcp.uninstalled': 'Uninstalled {name} from {targets}',
+  'mcp.uninstallFailed': 'Uninstall failed: {error}',
 
   // Instructions page (local CRUD + symlink install)
   'instructions.title': 'Instructions',
@@ -243,6 +249,9 @@ const zh: Record<string, string> = {
   'library.pagination': '第 {current} / {total} 页（共 {count} 项）',
   'library.previous': '上一页',
   'library.next': '下一页',
+  'library.uninstall': '卸载',
+  'library.uninstalled': '已从 {targets} 卸载 {name}',
+  'library.uninstallFailed': '卸载失败：{error}',
 
   // MCP 服务器页面（沿用 Library 的布局：已发现的注册表服务器 + 每行安装目标下拉框）
   'mcp.title': 'MCP 服务器',
@@ -265,6 +274,9 @@ const zh: Record<string, string> = {
   'mcp.installed': '已将 {name} 安装到 {targets}',
   'mcp.installFailed': '安装失败：{error}',
   'mcp.searchFailed': '搜索失败：{error}',
+  'mcp.uninstall': '卸载',
+  'mcp.uninstalled': '已从 {targets} 卸载 {name}',
+  'mcp.uninstallFailed': '卸载失败：{error}',
 
   // 指令页面（本地增删改查 + 符号链接安装）
   'instructions.title': '指令',

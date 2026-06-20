@@ -125,10 +125,10 @@ func TestInstructionsInstallEndpoints(t *testing.T) {
 		t.Fatalf("project no-dir status=%d, want 400", rec.Code)
 	}
 
-	// Unsupported level (copilot user) -> 400.
+	// Copilot user-level is now supported.
 	rec = doJSON(t, handler, http.MethodPost, "/api/instructions/"+strconv.FormatInt(id, 10)+"/installs", `{"app":"copilot","level":"user"}`)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("unsupported status=%d, want 400", rec.Code)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("copilot user-level status=%d, want 201", rec.Code)
 	}
 
 	// Duplicate install at same path now backs up the existing file and succeeds.
@@ -161,7 +161,7 @@ func TestInstructionTargetsEndpoint(t *testing.T) {
 	if s, ok := byApp["claude"]; !ok || !s["user"] || !s["project"] {
 		t.Fatalf("claude supports = %+v", byApp["claude"])
 	}
-	if s, ok := byApp["copilot"]; !ok || s["user"] || !s["project"] {
+	if s, ok := byApp["copilot"]; !ok || !s["user"] || !s["project"] {
 		t.Fatalf("copilot supports = %+v", byApp["copilot"])
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/chat2anyllm/code-agent-manager/internal/pathutil"
@@ -308,6 +309,59 @@ func (s *Store) MarkInstalled(ctx context.Context, kind, installKey, targetApp s
 		return fmt.Errorf("metadata: mark installed: %w", err)
 	}
 	return nil
+}
+
+// MarkUninstalled removes the specified app from the installed targets list.
+// If no targets remain, the installed flag is cleared.
+func (s *Store) MarkUninstalled(ctx context.Context, kind, installKey, app string) error {
+	if err := s.Init(ctx); err != nil {
+		return err
+	}
+	db, err := s.open()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	// Fetch current targets to compute the new list.
+	var currentTargets string
+	err = db.QueryRowContext(ctx, `
+		SELECT installed_targets FROM metadata_items
+		WHERE kind = ? AND install_key = ?`, kind, installKey).Scan(&currentTargets)
+	if err != nil {
+		return fmt.Errorf("metadata: mark uninstalled: %w", err)
+	}
+	// Remove the app from the comma-separated list.
+	newTargets := removeAppFromTargets(currentTargets, app)
+	now := timeNow()
+	if newTargets == "" {
+		_, err = db.ExecContext(ctx, `
+			UPDATE metadata_items SET installed = 0, installed_targets = '', updated_at = ?
+			WHERE kind = ? AND install_key = ?`, now, kind, installKey)
+	} else {
+		_, err = db.ExecContext(ctx, `
+			UPDATE metadata_items SET installed_targets = ?, updated_at = ?
+			WHERE kind = ? AND install_key = ?`, newTargets, now, kind, installKey)
+	}
+	if err != nil {
+		return fmt.Errorf("metadata: mark uninstalled: %w", err)
+	}
+	return nil
+}
+
+// removeAppFromTargets removes a specific app from a comma-separated target list.
+func removeAppFromTargets(targets, app string) string {
+	if targets == "" {
+		return ""
+	}
+	parts := strings.Split(targets, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" && p != app {
+			result = append(result, p)
+		}
+	}
+	return strings.Join(result, ",")
 }
 
 func scanItems(rows *sql.Rows) ([]Item, error) {

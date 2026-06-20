@@ -99,11 +99,17 @@ export const api = {
   async installMCPServer(server: string, clients: string[], scope = 'user'): Promise<{ status: string }> {
     return (await request<{ status: string }>('/api/mcp/install', { method: 'POST', body: JSON.stringify({ server, clients, scope }) })) ?? { status: 'installed' }
   },
+  async uninstallMCPServer(server: string, clients: string[], scope = 'user'): Promise<{ status: string }> {
+    return (await request<{ status: string }>('/api/mcp/uninstall', { method: 'POST', body: JSON.stringify({ server, clients, scope }) })) ?? { status: 'removed' }
+  },
   async listEntities(kind: Entity['kind']): Promise<Entity[]> {
     return (await request<Entity[]>(`/api/entities?kind=${encodeURIComponent(kind)}`)) ?? mockEntities.filter((entity) => entity.kind === kind)
   },
   async searchEntities(kind: Entity['kind'], query: string): Promise<Entity[]> {
     return (await request<Entity[]>(`/api/entities?kind=${encodeURIComponent(kind)}&query=${encodeURIComponent(query)}`)) ?? mockEntities.filter((entity) => entity.kind === kind && `${entity.name} ${entity.description}`.toLowerCase().includes(query.toLowerCase()))
+  },
+  async uninstallEntity(kind: string, name: string): Promise<{ status: string }> {
+    return (await request<{ status: string }>('/api/entities/uninstall', { method: 'POST', body: JSON.stringify({ kind, name }) })) ?? { status: 'removed' }
   },
   async listConfigFiles(): Promise<ConfigFile[]> {
     return (await request<ConfigFile[]>('/api/config/files')) ?? mockConfigFiles
@@ -138,6 +144,9 @@ export const api = {
       if (projectDir) body.project_dir = projectDir
     }
     return (await request<{ status: string }>('/api/metadata/install', { method: 'POST', body: JSON.stringify(body) })) ?? { status: 'installed' }
+  },
+  async uninstallMetadata(kind: string, installKey: string, targetApps: string[]): Promise<{ status: string }> {
+    return (await request<{ status: string }>('/api/metadata/uninstall', { method: 'POST', body: JSON.stringify({ kind, install_key: installKey, target_apps: targetApps }) })) ?? { status: 'uninstalled' }
   },
   async metadataTargets(kind: string): Promise<string[]> {
     return (await request<string[]>(`/api/metadata/targets?kind=${encodeURIComponent(kind)}`)) ?? mockTargets[kind] ?? ['claude']

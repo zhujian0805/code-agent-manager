@@ -57,12 +57,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/mcp/servers", s.handleMCPServers)
 	mux.HandleFunc("/api/mcp/registry", s.handleMCPRegistry)
 	mux.HandleFunc("/api/mcp/install", s.handleMCPInstall)
+	mux.HandleFunc("/api/mcp/uninstall", s.handleMCPUninstall)
 	mux.HandleFunc("/api/entities", s.handleEntities)
+	mux.HandleFunc("/api/entities/uninstall", s.handleEntityUninstall)
 	mux.HandleFunc("/api/instructions", s.handleInstructions)
 	mux.HandleFunc("/api/instructions/", s.handleInstructionsSub)
 	mux.HandleFunc("/api/metadata/refresh", s.handleMetadataRefresh)
 	mux.HandleFunc("/api/metadata/search", s.handleMetadataSearch)
 	mux.HandleFunc("/api/metadata/install", s.handleMetadataInstall)
+	mux.HandleFunc("/api/metadata/uninstall", s.handleMetadataUninstall)
 	mux.HandleFunc("/api/metadata/targets", s.handleMetadataTargets)
 	mux.HandleFunc("/api/metadata/detail", s.handleMetadataDetail)
 	mux.HandleFunc("/api/config/files", s.handleConfigFiles)
@@ -100,7 +103,7 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -293,6 +296,47 @@ func (s *Server) handleMCPInstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"status": "installed", "server": input.Server, "clients": clients})
 }
 
+// handleMCPUninstall removes an MCP server from one or more clients.
+func (s *Server) handleMCPUninstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var input struct {
+		Server  string   `json:"server"`
+		Clients []string `json:"clients"`
+		Client  string   `json:"client"`
+		Scope   string   `json:"scope"`
+	}
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	clients := input.Clients
+	if len(clients) == 0 && input.Client != "" {
+		clients = []string{input.Client}
+	}
+	if len(clients) == 0 {
+		writeError(w, http.StatusBadRequest, "no target clients specified")
+		return
+	}
+	if input.Server == "" {
+		writeError(w, http.StatusBadRequest, "server is required")
+		return
+	}
+	scope := input.Scope
+	if scope == "" {
+		scope = "user"
+	}
+	for _, clientName := range clients {
+		if _, err := s.services.MCP.Remove(clientName, scope, input.Server); err != nil {
+			writeResult(w, nil, err)
+			return
+		}
+	}
+	writeJSON(w, map[string]any{"status": "removed", "server": input.Server, "clients": clients})
+}
+
 func (s *Server) handleEntities(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
@@ -307,6 +351,37 @@ func (s *Server) handleEntities(w http.ResponseWriter, r *http.Request) {
 	}
 	entities, err := s.services.Entities.List(kind)
 	writeResult(w, entities, err)
+}
+
+// handleEntityUninstall removes an entity (skill/agent/plugin) from the
+// registry and its installed filesystem locations.
+func (s *Server) handleEntityUninstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var input struct {
+		Kind string `json:"kind"`
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if input.Kind == "" {
+		writeError(w, http.StatusBadRequest, "kind is required")
+		return
+	}
+	if input.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	result, err := s.services.Entities.Uninstall(input.Kind, input.Name)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	writeJSON(w, result)
 }
 
 func (s *Server) handleConfigFiles(w http.ResponseWriter, r *http.Request) {

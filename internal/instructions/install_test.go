@@ -166,13 +166,17 @@ func TestProjectDirRequired(t *testing.T) {
 	}
 }
 
-func TestUnsupportedLevel(t *testing.T) {
+func TestCopilotUserLevelSupported(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
 	in, _ := s.Create(ctx, "Cop", "", "x")
-	// copilot has no user-level instruction path.
-	if _, err := s.Install(ctx, in.ID, "copilot", "user", ""); !isErr(err, ErrUnsupportedTarget) {
-		t.Fatalf("expected ErrUnsupportedTarget, got %v", err)
+	// copilot now supports user-level instruction path.
+	ins, err := s.Install(ctx, in.ID, "copilot", "user", "")
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if ins.App != "copilot" {
+		t.Fatalf("expected app=copilot, got %s", ins.App)
 	}
 }
 

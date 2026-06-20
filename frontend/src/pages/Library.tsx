@@ -141,6 +141,18 @@ export function Library({ kind }: LibraryProps) {
     }
   }
 
+  async function uninstallFrom(item: MetadataItem, apps: string[]) {
+    setStatus('')
+    try {
+      await api.uninstallMetadata(item.kind, item.install_key, apps)
+      setStatus(t('library.uninstalled', { name: item.name, targets: apps.join(', ') }))
+      await load(query, offset)
+    } catch (err) {
+      setStatus(t('library.uninstallFailed', { error: err instanceof Error ? err.message : String(err) }))
+      throw err
+    }
+  }
+
   const pageCount = Math.ceil(total / PAGE_SIZE)
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1
   // "Installed only" filters the loaded page so users can see, at a glance, what
@@ -167,7 +179,7 @@ export function Library({ kind }: LibraryProps) {
         ? <div className="badges" aria-label={t('library.installedAgents')}>{installedApps.map((app) => <span key={app} className="badge badge-installed">{app}</span>)}</div>
         : <div className="badges"><span className="badge badge-not-installed">{t('library.notInstalled')}</span></div>
     } },
-    { header: 'Actions', cell: (item) => <ResourceActions item={item} targets={targets} onInstall={installTo} /> },
+    { header: 'Actions', cell: (item) => <ResourceActions item={item} targets={targets} onInstall={installTo} onUninstall={uninstallFrom} /> },
   ]
 
   return <Page title={title} description={t(descriptionKeys[kind])}>
@@ -208,13 +220,14 @@ type ResourceActionsProps = {
   item: MetadataItem
   targets: string[]
   onInstall: (item: MetadataItem, apps: string[]) => Promise<void>
+  onUninstall: (item: MetadataItem, apps: string[]) => Promise<void>
 }
 
-// ResourceActions renders the install-target picker and install button inside a
-// table row's Actions cell. The picker is a collapsed <details> so the full
-// agent list stays one click away (and in the DOM for accessibility) without
+// ResourceActions renders the install-target picker and install/uninstall buttons
+// inside a table row's Actions cell. The picker is a collapsed <details> so the
+// full agent list stays one click away (and in the DOM for accessibility) without
 // making the row tall.
-function ResourceActions({ item, targets, onInstall }: ResourceActionsProps) {
+function ResourceActions({ item, targets, onInstall, onUninstall }: ResourceActionsProps) {
   const { t } = useLanguage()
   const installedApps = item.installed_apps ?? []
   const [selected, setSelected] = useState<string[]>([])
@@ -225,6 +238,20 @@ function ResourceActions({ item, targets, onInstall }: ResourceActionsProps) {
     setInstalling(true)
     try {
       await onInstall(item, apps)
+      setSelected([])
+    } catch {
+      // status surfaced by parent
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  async function doUninstall() {
+    const apps = selected.length > 0 ? selected : installedApps
+    if (apps.length === 0) return
+    setInstalling(true)
+    try {
+      await onUninstall(item, apps)
       setSelected([])
     } catch {
       // status surfaced by parent
@@ -250,6 +277,9 @@ function ResourceActions({ item, targets, onInstall }: ResourceActionsProps) {
         listboxAriaLabel={t('library.installTargets', { name: item.name })}
       />
       <button className="primary" onClick={doInstall} disabled={installing}>{installLabel}</button>
+      {installedApps.length > 0 && (
+        <button className="danger" onClick={doUninstall} disabled={installing}>{t('library.uninstall')}</button>
+      )}
     </div>
   )
 }

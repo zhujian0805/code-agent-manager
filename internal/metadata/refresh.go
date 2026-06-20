@@ -408,6 +408,40 @@ func (svc *Service) InstallToTargets(ctx context.Context, kind, installKey strin
 	return lastErr
 }
 
+// UninstallFromTargets removes an entity from the specified apps and updates
+// the metadata store's installed status.
+func (svc *Service) UninstallFromTargets(ctx context.Context, kind, installKey string, targetApps []string) error {
+	if len(targetApps) == 0 {
+		return fmt.Errorf("metadata: no target agents specified")
+	}
+	item, err := svc.store.GetItem(ctx, kind, installKey)
+	if err != nil {
+		return fmt.Errorf("metadata: item not found: %w", err)
+	}
+
+	entityKind := entities.Kind(item.Kind)
+	entityName := item.Name
+
+	var removed []string
+	var lastErr error
+	for _, app := range targetApps {
+		if _, _, err := entities.UninstallFromApp(entityName, entityKind, app); err != nil {
+			lastErr = fmt.Errorf("metadata: uninstall from %s: %w", app, err)
+			continue
+		}
+		removed = append(removed, app)
+	}
+	if len(removed) == 0 {
+		return lastErr
+	}
+	for _, app := range removed {
+		if err := svc.store.MarkUninstalled(ctx, kind, installKey, app); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
 // fetchResourceContent downloads the resource's source repo and reads its
 // manifest content. Failures return an empty string so install still creates the
 // directory structure; the directory presence is what installed-status detection
