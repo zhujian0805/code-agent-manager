@@ -31,16 +31,17 @@ function sourceUrl(item: MetadataItem): string {
 
 // Each kind maps to its own i18n title/description keys. The "agent" kind is
 // labelled "Subagents" in the UI to distinguish installable subagent resources
-// from the runnable code agents shown on the Agents page.
-const titleKeys: Record<Entity['kind'], string> = {
-  instruction: 'library.instructions.title',
+// from the runnable code agents shown on the Agents page. Instructions are no
+// longer served here — they have a dedicated local-CRUD page (Instructions.tsx).
+type LibraryKind = Exclude<Entity['kind'], 'instruction'>
+
+const titleKeys: Record<LibraryKind, string> = {
   skill: 'library.skills.title',
   agent: 'library.agents.title',
   plugin: 'library.plugins.title',
 }
 
-const descriptionKeys: Record<Entity['kind'], string> = {
-  instruction: 'library.instructions.description',
+const descriptionKeys: Record<LibraryKind, string> = {
   skill: 'library.skills.description',
   agent: 'library.agents.description',
   plugin: 'library.plugins.description',
@@ -49,7 +50,7 @@ const descriptionKeys: Record<Entity['kind'], string> = {
 const PAGE_SIZE = 20
 
 type LibraryProps = {
-  kind: Entity['kind']
+  kind: LibraryKind
 }
 
 export function Library({ kind }: LibraryProps) {
@@ -128,10 +129,10 @@ export function Library({ kind }: LibraryProps) {
     }
   }
 
-  async function installTo(item: MetadataItem, apps: string[], level?: string, projectDir?: string) {
+  async function installTo(item: MetadataItem, apps: string[]) {
     setStatus('')
     try {
-      await api.installMetadata(item.kind, item.install_key, apps, level, projectDir)
+      await api.installMetadata(item.kind, item.install_key, apps)
       setStatus(`Installed ${item.name} to ${apps.join(', ')}`)
       await load(query, offset)
     } catch (err) {
@@ -206,33 +207,24 @@ export function Library({ kind }: LibraryProps) {
 type ResourceActionsProps = {
   item: MetadataItem
   targets: string[]
-  onInstall: (item: MetadataItem, apps: string[], level?: string, projectDir?: string) => Promise<void>
+  onInstall: (item: MetadataItem, apps: string[]) => Promise<void>
 }
 
 // ResourceActions renders the install-target picker and install button inside a
 // table row's Actions cell. The picker is a collapsed <details> so the full
 // agent list stays one click away (and in the DOM for accessibility) without
-// making the row tall. Instruction rows also expose install level controls.
+// making the row tall.
 function ResourceActions({ item, targets, onInstall }: ResourceActionsProps) {
   const { t } = useLanguage()
   const installedApps = item.installed_apps ?? []
   const [selected, setSelected] = useState<string[]>([])
   const [installing, setInstalling] = useState(false)
-  const [installLevel, setInstallLevel] = useState<'user' | 'project'>('user')
-  const [projectDir, setProjectDir] = useState('')
-  const [projectDirError, setProjectDirError] = useState('')
-  const isInstruction = item.kind === 'instruction'
 
   async function doInstall() {
     const apps = selected.length > 0 ? selected : ['claude']
-    if (isInstruction && installLevel === 'project' && !projectDir.trim()) {
-      setProjectDirError('Project directory is required for project-level install')
-      return
-    }
-    setProjectDirError('')
     setInstalling(true)
     try {
-      await onInstall(item, apps, isInstruction ? installLevel : undefined, isInstruction ? projectDir : undefined)
+      await onInstall(item, apps)
       setSelected([])
     } catch {
       // status surfaced by parent
@@ -257,31 +249,6 @@ function ResourceActions({ item, targets, onInstall }: ResourceActionsProps) {
         triggerAriaLabel={t('library.selectAgentsFor', { name: item.name })}
         listboxAriaLabel={t('library.installTargets', { name: item.name })}
       />
-      {isInstruction && (
-        <div className="install-level-controls">
-          <label className="level-label">
-            <select
-              aria-label="Install level"
-              value={installLevel}
-              onChange={(event) => setInstallLevel(event.target.value as 'user' | 'project')}
-            >
-              <option value="user">User level</option>
-              <option value="project">Project level</option>
-            </select>
-          </label>
-          {installLevel === 'project' && (
-            <label className="project-dir-label">
-              <input
-                aria-label="Project directory"
-                value={projectDir}
-                onChange={(event) => { setProjectDir(event.target.value); setProjectDirError('') }}
-                placeholder="/path/to/project"
-              />
-              {projectDirError && <span className="error-text" role="alert">{projectDirError}</span>}
-            </label>
-          )}
-        </div>
-      )}
       <button className="primary" onClick={doInstall} disabled={installing}>{installLabel}</button>
     </div>
   )

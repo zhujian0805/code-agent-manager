@@ -2,6 +2,7 @@ package appstate
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -80,5 +81,53 @@ func TestAppStateKeyValue(t *testing.T) {
 	}
 	if _, err := os.Stat(store.Path()); err != nil {
 		t.Fatalf("db file missing: %v", err)
+	}
+}
+
+// TestInitCreatesInstructionTablesWithoutLosingData verifies that opening a
+// cam.db created before the instructions feature lands adds the new tables
+// while leaving existing providers/app_state rows intact.
+func TestInitCreatesInstructionTablesWithoutLosingData(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "cam.db")
+	store := New(dbPath)
+
+	enabled := true
+	if err := store.AddProvider(ctx, "alpha", providers.Endpoint{Endpoint: "https://alpha.example", Models: []string{"m1"}, Enabled: &enabled}); err != nil {
+		t.Fatalf("AddProvider: %v", err)
+	}
+	if err := store.SetState(ctx, "ui", map[string]any{"sidebar": "wide"}); err != nil {
+		t.Fatalf("SetState: %v", err)
+	}
+
+	// Re-init (simulating an upgraded binary opening an existing DB).
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	for _, table := range []string{"instructions", "instruction_installs"} {
+		var name string
+		err := db.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&name)
+		if err != nil {
+			t.Fatalf("table %s missing: %v", table, err)
+		}
+	}
+
+	file, err := store.ListProviders(ctx)
+	if err != nil {
+		t.Fatalf("ListProviders: %v", err)
+	}
+	if _, ok := file.Endpoints["alpha"]; !ok {
+		t.Fatalf("provider lost after upgrade: %+v", file.Endpoints)
+	}
+	var got map[string]any
+	ok, err := store.GetState(ctx, "ui", &got)
+	if err != nil || !ok || got["sidebar"] != "wide" {
+		t.Fatalf("app_state lost after upgrade: ok=%v err=%v value=%+v", ok, err, got)
 	}
 }

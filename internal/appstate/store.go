@@ -310,4 +310,23 @@ CREATE TABLE IF NOT EXISTS app_state (
   value_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS instructions (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT    NOT NULL UNIQUE,
+  description  TEXT    NOT NULL DEFAULT '',
+  content      TEXT    NOT NULL DEFAULT '',
+  created_at   TEXT    NOT NULL,
+  updated_at   TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS instruction_installs (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  instruction_id  INTEGER NOT NULL REFERENCES instructions(id) ON DELETE CASCADE,
+  app             TEXT    NOT NULL,
+  level           TEXT    NOT NULL,
+  project_dir     TEXT    NOT NULL DEFAULT '',
+  target_path     TEXT    NOT NULL,
+  link_kind       TEXT    NOT NULL,
+  created_at      TEXT    NOT NULL,
+  UNIQUE(app, level, project_dir)
+);
 `

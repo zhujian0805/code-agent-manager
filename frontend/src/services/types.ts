@@ -146,3 +146,32 @@ export type MetadataRefreshSummary = {
   items_stale: number
   failed_sources: string[]
 }
+
+// InstructionInstall is one place a saved instruction is linked into a
+// coding-agent path (mirrors the Go instructions.Install struct).
+export type InstructionInstall = {
+  id: number
+  app: string
+  level: 'user' | 'project'
+  project_dir: string
+  target_path: string
+  link_kind: 'symlink' | 'copy'
+  created_at?: string
+}
+
+// Instruction is a user-authored local instruction file managed by CAM.
+export type Instruction = {
+  id: number
+  name: string
+  description: string
+  content: string
+  created_at?: string
+  updated_at?: string
+  installs?: InstructionInstall[]
+}
+
+// InstructionTarget lists an app and the install levels it supports.
+export type InstructionTarget = {
+  app: string
+  supports: { user: boolean; project: boolean }
+}

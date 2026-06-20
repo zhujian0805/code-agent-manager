@@ -58,6 +58,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/mcp/registry", s.handleMCPRegistry)
 	mux.HandleFunc("/api/mcp/install", s.handleMCPInstall)
 	mux.HandleFunc("/api/entities", s.handleEntities)
+	mux.HandleFunc("/api/instructions", s.handleInstructions)
+	mux.HandleFunc("/api/instructions/", s.handleInstructionsSub)
 	mux.HandleFunc("/api/metadata/refresh", s.handleMetadataRefresh)
 	mux.HandleFunc("/api/metadata/search", s.handleMetadataSearch)
 	mux.HandleFunc("/api/metadata/install", s.handleMetadataInstall)
@@ -386,6 +388,13 @@ func writeResult(w http.ResponseWriter, value any, err error) {
 
 func writeJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(value)
+}
+
+// writeJSONStatus writes value as JSON with an explicit status code.
+func writeJSONStatus(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
 

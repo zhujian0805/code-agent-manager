@@ -4,6 +4,7 @@ import { Agents } from './pages/Agents'
 import { Providers } from './pages/Providers'
 import { MCP } from './pages/MCP'
 import { Library } from './pages/Library'
+import { Instructions } from './pages/Instructions'
 import { Configuration } from './pages/Configuration'
 import { Diagnostics } from './pages/Diagnostics'
 import { Settings } from './pages/Settings'
@@ -25,15 +26,30 @@ const nav: { route: Route; labelKey: string; icon: typeof Bot }[] = [
   { route: 'settings', labelKey: 'nav.settings', icon: SettingsIcon },
 ]
 
+const ROUTES: Route[] = ['providers', 'agents', 'mcp', 'instructions', 'skills', 'subagents', 'plugins', 'config', 'diagnostics', 'settings']
+
+function readInitialRoute(): Route {
+  try {
+    const saved = localStorage.getItem('cam.route')
+    if (saved && ROUTES.includes(saved as Route)) return saved as Route
+  } catch { /* localStorage unavailable */ }
+  return 'agents'
+}
+
 function Shell() {
-  const [route, setRoute] = useState<Route>('agents')
+  const [route, setRoute] = useState<Route>(readInitialRoute)
   const { theme, toggle } = useTheme()
   const { t, language, toggle: toggleLanguage } = useLanguage()
+
+  function navigate(r: Route) {
+    setRoute(r)
+    try { localStorage.setItem('cam.route', r) } catch { /* ignore */ }
+  }
 
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><Activity /> <span>{t('brand')}</span></div>
-      <nav>{nav.map((item) => { const Icon = item.icon; return <button key={item.route} className={route === item.route ? 'active' : ''} onClick={() => setRoute(item.route)}><Icon size={18} />{t(item.labelKey)}</button> })}</nav>
+      <nav>{nav.map((item) => { const Icon = item.icon; return <button key={item.route} className={route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><Icon size={18} />{t(item.labelKey)}</button> })}</nav>
       <div className="spacer" />
       <div className="sidebar-footer">
         <button onClick={toggleLanguage} aria-label="Toggle language" lang={language === 'en' ? 'zh' : 'en'}>
@@ -50,7 +66,7 @@ function Shell() {
       {route === 'agents' && <Agents />}
       {route === 'providers' && <Providers />}
       {route === 'mcp' && <MCP />}
-      {route === 'instructions' && <Library kind="instruction" />}
+      {route === 'instructions' && <Instructions />}
       {route === 'skills' && <Library kind="skill" />}
       {route === 'subagents' && <Library kind="agent" />}
       {route === 'plugins' && <Library kind="plugin" />}

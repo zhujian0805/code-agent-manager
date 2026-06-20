@@ -1,5 +1,5 @@
 import { mockConfigFiles, mockDoctorChecks, mockEntities, mockMCPClients, mockMCPServers, mockMCPRegistry, mockMetadataItems, mockProviders, mockTargets, mockTools } from './mockData'
-import type { ApplyResult, ConfigFile, DoctorCheck, Entity, LaunchPlan, MCPClient, MCPRegistryItem, MCPServer, MetadataDetail, MetadataRefreshSummary, MetadataSearchResponse, Provider, Tool } from './types'
+import type { ApplyResult, ConfigFile, DoctorCheck, Entity, Instruction, InstructionInstall, InstructionTarget, LaunchPlan, MCPClient, MCPRegistryItem, MCPServer, MetadataDetail, MetadataRefreshSummary, MetadataSearchResponse, Provider, Tool } from './types'
 
 type SidecarConfig = {
   baseUrl: string
@@ -151,5 +151,47 @@ export const api = {
     const item = mockMetadataItems.find((entry) => entry.kind === kind && entry.install_key === installKey)
       ?? { kind, name: installKey, description: '', install_key: installKey, repo_owner: '', repo_name: '', repo_branch: 'main', target_apps: '', installed_apps: [], installed: false }
     return { item, content: `# ${item.name}\n\n${item.description}`, manifest_path: '' }
+  },
+
+  // Instructions: local CRUD + symlink install. These hit the sidecar's
+  // /api/instructions/* endpoints. In browser-only/mock mode (no sidecar) the
+  // mutating calls throw, and listInstructions returns an empty list so the
+  // page renders its empty state rather than crashing.
+  async listInstructions(): Promise<Instruction[]> {
+    return (await request<Instruction[]>('/api/instructions')) ?? []
+  },
+  async getInstruction(id: number): Promise<Instruction> {
+    const resp = await request<Instruction>(`/api/instructions/${id}`)
+    if (resp) return resp
+    throw new Error('sidecar unavailable')
+  },
+  async createInstruction(body: { name: string; description: string; content: string }): Promise<Instruction> {
+    const resp = await request<Instruction>('/api/instructions', { method: 'POST', body: JSON.stringify(body) })
+    if (resp) return resp
+    throw new Error('sidecar unavailable')
+  },
+  async updateInstruction(id: number, body: { name: string; description: string; content: string }): Promise<Instruction> {
+    const resp = await request<Instruction>(`/api/instructions/${id}`, { method: 'PUT', body: JSON.stringify(body) })
+    if (resp) return resp
+    throw new Error('sidecar unavailable')
+  },
+  async deleteInstruction(id: number): Promise<void> {
+    await (request<unknown>(`/api/instructions/${id}`, { method: 'DELETE' }) ?? Promise.resolve())
+  },
+  async installInstruction(id: number, body: { app: string; level: string; project_dir?: string }): Promise<InstructionInstall> {
+    const resp = await request<InstructionInstall>(`/api/instructions/${id}/installs`, { method: 'POST', body: JSON.stringify(body) })
+    if (resp) return resp
+    throw new Error('sidecar unavailable')
+  },
+  async uninstallInstruction(installId: number): Promise<void> {
+    await (request<unknown>(`/api/instructions/installs/${installId}`, { method: 'DELETE' }) ?? Promise.resolve())
+  },
+  async instructionTargets(): Promise<InstructionTarget[]> {
+    return (await request<InstructionTarget[]>('/api/instructions/targets')) ?? [
+      { app: 'claude', supports: { user: true, project: true } },
+      { app: 'codex', supports: { user: true, project: true } },
+      { app: 'gemini', supports: { user: true, project: true } },
+      { app: 'copilot', supports: { user: false, project: true } },
+    ]
   },
 }
