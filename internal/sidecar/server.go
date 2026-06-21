@@ -417,7 +417,10 @@ func (s *Server) handleLaunchDryRun(w http.ResponseWriter, r *http.Request) {
 		Model:    r.URL.Query().Get("model"),
 	}
 	if r.Method == http.MethodPost && r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&input)
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+			return
+		}
 	}
 	plan, err := s.services.Launch.DryRun(input.Tool, input.Provider, input.Model, input.Args)
 	writeResult(w, plan, err)
@@ -434,7 +437,10 @@ func (s *Server) handleLaunchApply(w http.ResponseWriter, r *http.Request) {
 		Model    string `json:"model"`
 	}{}
 	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&input)
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+			return
+		}
 	}
 	result, err := s.services.Launch.ApplyConfig(input.Tool, input.Provider, input.Model)
 	writeResult(w, result, err)

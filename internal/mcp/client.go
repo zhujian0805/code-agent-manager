@@ -6,9 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/chat2anyllm/code-agent-manager/internal/pathutil"
 )
+
+// fileMu protects concurrent read-modify-write operations on MCP config files.
+// Keyed by resolved file path.
+var fileMu sync.Map
 
 // Scope identifies user-level vs project-level MCP installation.
 type Scope string
@@ -103,6 +108,10 @@ func AddServer(client ClientSpec, scope Scope, server Server) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("mcp: client %s does not support scope %s", client.Name, scope)
 	}
+	// Lock per-file to prevent concurrent read-modify-write races.
+	mu, _ := fileMu.LoadOrStore(path, &sync.Mutex{})
+	mu.(*sync.Mutex).Lock()
+	defer mu.(*sync.Mutex).Unlock()
 	data, err := readJSON(path)
 	if err != nil {
 		return "", err
@@ -126,6 +135,10 @@ func RemoveServer(client ClientSpec, scope Scope, serverName string) (string, bo
 	if path == "" {
 		return "", false, fmt.Errorf("mcp: client %s does not support scope %s", client.Name, scope)
 	}
+	// Lock per-file to prevent concurrent read-modify-write races.
+	mu, _ := fileMu.LoadOrStore(path, &sync.Mutex{})
+	mu.(*sync.Mutex).Lock()
+	defer mu.(*sync.Mutex).Unlock()
 	data, err := readJSON(path)
 	if err != nil {
 		return path, false, err

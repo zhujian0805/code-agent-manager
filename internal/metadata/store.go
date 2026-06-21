@@ -312,7 +312,8 @@ func (s *Store) MarkInstalled(ctx context.Context, kind, installKey, targetApp s
 }
 
 // MarkUninstalled removes the specified app from the installed targets list.
-// If no targets remain, the installed flag is cleared.
+// If no targets remain, the installed flag is cleared. Uses a transaction to
+// prevent race conditions when multiple concurrent uninstalls target the same item.
 func (s *Store) MarkUninstalled(ctx context.Context, kind, installKey, app string) error {
 	if err := s.Init(ctx); err != nil {
 		return err
@@ -322,9 +323,14 @@ func (s *Store) MarkUninstalled(ctx context.Context, kind, installKey, app strin
 		return err
 	}
 	defer db.Close()
-	// Fetch current targets to compute the new list.
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("metadata: mark uninstalled: begin tx: %w", err)
+	}
+	defer tx.Rollback()
+	// Fetch current targets within the transaction.
 	var currentTargets string
-	err = db.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, `
 		SELECT installed_targets FROM metadata_items
 		WHERE kind = ? AND install_key = ?`, kind, installKey).Scan(&currentTargets)
 	if err != nil {
@@ -334,18 +340,18 @@ func (s *Store) MarkUninstalled(ctx context.Context, kind, installKey, app strin
 	newTargets := removeAppFromTargets(currentTargets, app)
 	now := timeNow()
 	if newTargets == "" {
-		_, err = db.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, `
 			UPDATE metadata_items SET installed = 0, installed_targets = '', updated_at = ?
 			WHERE kind = ? AND install_key = ?`, now, kind, installKey)
 	} else {
-		_, err = db.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, `
 			UPDATE metadata_items SET installed_targets = ?, updated_at = ?
 			WHERE kind = ? AND install_key = ?`, newTargets, now, kind, installKey)
 	}
 	if err != nil {
 		return fmt.Errorf("metadata: mark uninstalled: %w", err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // removeAppFromTargets removes a specific app from a comma-separated target list.

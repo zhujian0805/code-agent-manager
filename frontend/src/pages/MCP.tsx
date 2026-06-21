@@ -32,18 +32,23 @@ export function MCP() {
   // Library's apps.
   useEffect(() => { void api.listMCPClients().then((clients) => setTargets(clients.map((c) => c.name))) }, [])
 
-  const load = useCallback(async (q: string) => {
+  const load = useCallback(async (q: string, signal?: AbortSignal) => {
     setLoading(true)
     try {
-      setItems(await api.searchMCPRegistry(q))
+      const items = await api.searchMCPRegistry(q)
+      if (!signal?.aborted) setItems(items)
     } catch (err) {
-      setStatus(t('mcp.searchFailed', { error: err instanceof Error ? err.message : String(err) }))
+      if (!signal?.aborted) setStatus(t('mcp.searchFailed', { error: err instanceof Error ? err.message : String(err) }))
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) setLoading(false)
     }
   }, [t])
 
-  useEffect(() => { void load(query) }, [load, query])
+  useEffect(() => {
+    const controller = new AbortController()
+    void load(query, controller.signal)
+    return () => controller.abort()
+  }, [load, query])
 
   async function reload() {
     setReloading(true)

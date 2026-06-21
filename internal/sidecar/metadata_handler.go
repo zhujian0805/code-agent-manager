@@ -1,7 +1,6 @@
 package sidecar
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/chat2anyllm/code-agent-manager/internal/entities"
@@ -15,7 +14,7 @@ func (s *Server) handleMetadataRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 	store := metadata.NewStore("")
 	svc := metadata.NewService(store)
-	summary, err := svc.RefreshAll(context.Background())
+	summary, err := svc.RefreshAll(r.Context())
 	writeResult(w, summary, err)
 }
 
@@ -35,7 +34,7 @@ func (s *Server) handleMetadataSearch(w http.ResponseWriter, r *http.Request) {
 	limit := atoiDefault(r.URL.Query().Get("limit"), 50)
 	offset := atoiDefault(r.URL.Query().Get("offset"), 0)
 
-	resp, err := svc.SearchPaged(context.Background(), metadata.SearchQuery{
+	resp, err := svc.SearchPaged(r.Context(), metadata.SearchQuery{
 		Query:  q,
 		Kind:   kind,
 		Limit:  limit,
@@ -79,6 +78,13 @@ func (s *Server) handleMetadataInstall(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "kind 'prompt' has been renamed to 'instruction'; use kind=instruction")
 		return
 	}
+	switch input.Kind {
+	case "skill", "agent", "instruction", "plugin":
+		// valid
+	default:
+		writeError(w, http.StatusBadRequest, "invalid kind: must be skill, agent, instruction, or plugin")
+		return
+	}
 	targets := input.TargetApps
 	if len(targets) == 0 && input.TargetApp != "" {
 		targets = []string{input.TargetApp}
@@ -98,11 +104,11 @@ func (s *Server) handleMetadataInstall(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "project_dir is required for project-level instruction install")
 			return
 		}
-		err := svc.InstallInstructionToTargets(context.Background(), input.InstallKey, targets, level, input.ProjectDir)
+		err := svc.InstallInstructionToTargets(r.Context(), input.InstallKey, targets, level, input.ProjectDir)
 		writeResult(w, map[string]any{"status": "installed", "install_key": input.InstallKey, "targets": targets, "level": level, "project_dir": input.ProjectDir}, err)
 		return
 	}
-	err := svc.InstallToTargets(context.Background(), input.Kind, input.InstallKey, targets)
+	err := svc.InstallToTargets(r.Context(), input.Kind, input.InstallKey, targets)
 	writeResult(w, map[string]any{"status": "installed", "install_key": input.InstallKey, "targets": targets}, err)
 }
 
@@ -126,6 +132,13 @@ func (s *Server) handleMetadataUninstall(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "kind is required")
 		return
 	}
+	switch input.Kind {
+	case "skill", "agent", "instruction", "plugin":
+		// valid
+	default:
+		writeError(w, http.StatusBadRequest, "invalid kind: must be skill, agent, instruction, or plugin")
+		return
+	}
 	if input.InstallKey == "" {
 		writeError(w, http.StatusBadRequest, "install_key is required")
 		return
@@ -137,7 +150,7 @@ func (s *Server) handleMetadataUninstall(w http.ResponseWriter, r *http.Request)
 	}
 	store := metadata.NewStore("")
 	svc := metadata.NewService(store)
-	err := svc.UninstallFromTargets(context.Background(), input.Kind, input.InstallKey, targets)
+	err := svc.UninstallFromTargets(r.Context(), input.Kind, input.InstallKey, targets)
 	writeResult(w, map[string]any{"status": "uninstalled", "install_key": input.InstallKey, "targets": targets}, err)
 }
 
