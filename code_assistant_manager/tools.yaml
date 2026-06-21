@@ -329,6 +329,15 @@ tools:
     env:
       managed:
         NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    config_target:
+      path: ~/.config/opencode/opencode.json
+      format: json
+      upsert:
+        provider.{endpoint_name}.npm: "@ai-sdk/openai-compatible"
+        provider.{endpoint_name}.name: "{endpoint_name}"
+        provider.{endpoint_name}.options.baseURL: "{endpoint}"
+        provider.{endpoint_name}.options.apiKey: "{api_key}"
+        model: "{endpoint_name}/{selected_model}"
     configuration:
       notes:
         - "OpenCode.ai supports 75+ LLM providers via AI SDK and Models.dev"

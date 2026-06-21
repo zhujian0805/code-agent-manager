@@ -28,20 +28,6 @@ cd code-agent-manager
 ./install.sh
 ```
 
-Or use pipx (Works on MacOS)
-
-```bash                                                                                                                                                  
-  # Install pipx if not present                                                                                                                                          
-  brew install pipx                                               
-                                                                                                                                                                         
-  # Clone the repository                                          
-  git clone https://github.com/Chat2AnyLLM/code-assistant-manager.git
-  cd code-assistant-manager                                          
-                                                                                                                                                                         
-  # Install using pipx
-  pipx install . 
-```
-
 ### Alternative Methods
 
 ```bash
@@ -163,7 +149,7 @@ CAM uses these main configuration files:
 
 ### How `config.yaml` is used for instruction/skill/agent/plugin repos
 
-- CAM loads `~/.config/code-agent-manager/config.yaml` first; if missing, it falls back to bundled `code_assistant_manager/config.yaml`.
+- CAM loads `~/.config/code-agent-manager/config.yaml` first; if missing, it falls back to the bundled Go config at `internal/camconfig/embed/config.yaml`.
 - The file defines source lists for `instructions`, `skills`, `agents`, and `plugins`.
 - Local JSON sources (`instruction_repos.json`, `skill_repos.json`, `agent_repos.json`, `plugin_repos.json`) are loaded first.
 - Remote sources are merged after local sources and do not override existing local keys.

@@ -4,7 +4,7 @@ Code Assistant Manager now supports loading repository configurations from multi
 
 ## Installation
 
-When you install code-agent-manager, the `config.yaml` file is automatically copied to:
+CAM reads user repository-source configuration from:
 ```
 ~/.config/code-agent-manager/config.yaml
 ```
@@ -25,8 +25,8 @@ Repository configurations (for skills, agents, and plugins) are loaded from mult
    - `https://raw.githubusercontent.com/Chat2AnyLLM/awesome-repo-configs/main/agent_repos.json`
    - `https://raw.githubusercontent.com/Chat2AnyLLM/awesome-repo-configs/main/plugin_repos.json`
 
-3. **Bundled defaults** (fallback) - Package defaults
-   - Built-in repositories included with the package
+3. **Bundled defaults** (fallback) - Go-embedded defaults
+   - Built-in repositories included with the binary
 
 ## Configuration
 
@@ -36,7 +36,7 @@ The sources are configured in `config.yaml`:
 
 The bundled `config.yaml` is located at:
 ```
-code_assistant_manager/config.yaml
+internal/camconfig/embed/config.yaml
 ```
 
 It defines the default sources for each repository type.
