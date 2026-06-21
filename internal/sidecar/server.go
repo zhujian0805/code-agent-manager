@@ -53,6 +53,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/providers", s.handleProviders)
 	mux.HandleFunc("/api/providers/", s.handleProvider)
 	mux.HandleFunc("/api/tools", s.handleTools)
+	mux.HandleFunc("/api/tools/", s.handleToolAction)
 	mux.HandleFunc("/api/mcp/clients", s.handleMCPClients)
 	mux.HandleFunc("/api/mcp/servers", s.handleMCPServers)
 	mux.HandleFunc("/api/mcp/registry", s.handleMCPRegistry)
@@ -220,6 +221,45 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 	}
 	tools, err := s.services.Tools.List()
 	writeResult(w, tools, err)
+}
+
+func (s *Server) handleToolAction(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/tools/"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		writeError(w, http.StatusNotFound, "tool action not found")
+		return
+	}
+	name, action := parts[0], parts[1]
+	var input struct {
+		DryRun bool `json:"dryRun"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := decodeJSON(r, &input); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	var result desktop.OperationResult
+	var err error
+	switch action {
+	case "install":
+		result, err = s.services.Tools.Install(name, input.DryRun)
+	case "upgrade":
+		result, err = s.services.Tools.Upgrade(name, input.DryRun)
+	default:
+		writeError(w, http.StatusNotFound, "unknown tool action")
+		return
+	}
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	tool, err := s.services.Tools.Detect(name)
+	writeResult(w, desktop.ToolOperationDTO{Result: result, Tool: tool}, err)
 }
 
 func (s *Server) handleMCPClients(w http.ResponseWriter, r *http.Request) {

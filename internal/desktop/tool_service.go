@@ -112,6 +112,17 @@ func (s *ToolService) Upgrade(name string, dryRun bool) (OperationResult, error)
 	return s.Install(name, dryRun)
 }
 
+func (s *ToolService) Detect(name string) (ToolDTO, error) {
+	tool, err := loadTool(name)
+	if err != nil {
+		return ToolDTO{}, err
+	}
+	installed, version := tools.Detect(tool)
+	s.cache.put(tool.Name, installed, version)
+	s.cache.persist()
+	return toolDTOWith(tool, installed, version), nil
+}
+
 func loadTool(name string) (tools.Tool, error) {
 	registry, err := tools.LoadDefault()
 	if err != nil {

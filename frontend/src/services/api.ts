@@ -1,5 +1,5 @@
 import { mockConfigFiles, mockDoctorChecks, mockEntities, mockMCPClients, mockMCPServers, mockMCPRegistry, mockMetadataItems, mockProviders, mockTargets, mockTools } from './mockData'
-import type { ApplyResult, ConfigFile, DoctorCheck, Entity, Instruction, InstructionInstall, InstructionTarget, LaunchPlan, MCPClient, MCPRegistryItem, MCPServer, MetadataDetail, MetadataRefreshSummary, MetadataSearchResponse, Provider, Tool } from './types'
+import type { ApplyResult, ConfigFile, DoctorCheck, Entity, Instruction, InstructionInstall, InstructionTarget, LaunchPlan, MCPClient, MCPRegistryItem, MCPServer, MetadataDetail, MetadataRefreshSummary, MetadataSearchResponse, Provider, Tool, ToolOperation } from './types'
 
 type SidecarConfig = {
   baseUrl: string
@@ -51,6 +51,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T | und
 export const api = {
   async listTools(): Promise<Tool[]> {
     return (await request<Tool[]>('/api/tools')) ?? mockTools
+  },
+  async installTool(name: string): Promise<ToolOperation> {
+    const fallbackTool = mockTools.find((tool) => tool.name === name || tool.command === name) ?? mockTools[0]
+    return (await request<ToolOperation>(`/api/tools/${encodeURIComponent(name)}/install`, { method: 'POST', body: JSON.stringify({}) })) ?? { result: { ok: true, message: 'mock installed' }, tool: { ...fallbackTool, installed: true, version: fallbackTool.version === 'unknown' ? 'mock' : fallbackTool.version } }
+  },
+  async upgradeTool(name: string): Promise<ToolOperation> {
+    const fallbackTool = mockTools.find((tool) => tool.name === name || tool.command === name) ?? mockTools[0]
+    return (await request<ToolOperation>(`/api/tools/${encodeURIComponent(name)}/upgrade`, { method: 'POST', body: JSON.stringify({}) })) ?? { result: { ok: true, message: 'mock upgraded' }, tool: { ...fallbackTool, installed: true, version: fallbackTool.version === 'unknown' ? 'mock' : fallbackTool.version } }
   },
   async listProviders(): Promise<Provider[]> {
     return (await request<Provider[]>('/api/providers')) ?? mockProviders

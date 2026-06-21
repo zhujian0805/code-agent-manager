@@ -48,6 +48,9 @@ function savePrefs(prefs: AgentSelection) {
 
 type ApplyState = 'idle' | 'applying' | 'done' | 'error'
 type ApplyStatus = { state: ApplyState; message: string }
+type LifecycleAction = 'install' | 'upgrade'
+type LifecycleState = 'idle' | 'running' | 'done' | 'error'
+type LifecycleStatus = { state: LifecycleState; action: LifecycleAction; message: string }
 
 // Agents lists the coding agents CAM manages, one row per agent in a compact
 // table. Each row lets the user pick the provider and model to target, then
@@ -61,13 +64,18 @@ export function Agents() {
   const [providers, setProviders] = useState<Provider[]>([])
   const [prefs, setPrefs] = useState<AgentSelection>(() => loadPrefs())
   const [applyStatus, setApplyStatus] = useState<Record<string, ApplyStatus>>({})
+  const [lifecycleStatus, setLifecycleStatus] = useState<Record<string, LifecycleStatus>>({})
   // resolvedModels caches the full model list per provider, fetched from the
   // sidecar's /api/providers/{name}/models endpoint. This merges API-discovered
   // models with statically configured ones and built-in defaults — unlike
   // provider.models, which only holds the static list.
   const [resolvedModels, setResolvedModels] = useState<Record<string, string[]>>({})
 
-  useEffect(() => { void api.listTools().then(setTools) }, [])
+  async function reloadTools() {
+    setTools(await api.listTools())
+  }
+
+  useEffect(() => { void reloadTools() }, [])
   useEffect(() => { void api.listProviders().then(setProviders) }, [])
 
   const providersByName = useMemo(() => {
@@ -143,6 +151,20 @@ export function Agents() {
     }
   }
 
+  async function runLifecycle(toolName: string, action: LifecycleAction) {
+    setLifecycleStatus((s) => ({ ...s, [toolName]: { state: 'running', action, message: action === 'install' ? t('agents.installing') : t('agents.upgrading') } }))
+    try {
+      const result = action === 'install' ? await api.installTool(toolName) : await api.upgradeTool(toolName)
+      const refreshed = await api.listTools()
+      setTools(refreshed.map((tool) => tool.name === result.tool.name || tool.command === result.tool.command ? result.tool : tool))
+      setLifecycleStatus((s) => ({ ...s, [toolName]: { state: 'done', action, message: action === 'install' ? t('agents.installDone', { name: toolName }) : t('agents.upgradeDone', { name: toolName }) } }))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      const label = action === 'install' ? t('agents.install') : t('agents.upgrade')
+      setLifecycleStatus((s) => ({ ...s, [toolName]: { state: 'error', action, message: t('agents.lifecycleFailed', { action: label, error: message }) } }))
+    }
+  }
+
   const columns: Column<AgentCommand>[] = [
     { header: t('agents.title'), cell: (tool) => <strong>{tool.name}</strong> },
     { header: t('agents.provider'), cell: (tool) => (
@@ -185,19 +207,38 @@ export function Agents() {
         />
       )
     } },
-    { header: 'Status', cell: (tool) => tool.installed ? t('agents.detected', { version: tool.version }) : t('agents.notDetected') },
+    { header: 'Status', cell: (tool) => (
+      <div className="agent-status-cell">
+        <span className={`badge ${tool.installed ? 'badge-installed' : 'badge-not-installed'}`}>{tool.installed ? t('agents.installed') : t('agents.notInstalled')}</span>
+        <span>{tool.installed ? t('agents.detected', { version: tool.version }) : t('agents.notDetected')}</span>
+      </div>
+    ) },
     { header: 'Command', cell: (tool) => <code>{tool.runCommand}</code> },
     { header: t('agents.apply'), cell: (tool) => {
       const status = applyStatus[tool.name]
       const busy = status?.state === 'applying'
       return (
-        <div className="agent-apply-cell">
+        <div className="agent-row-actions">
+          <button
+            className={tool.installed ? undefined : 'primary'}
+            onClick={() => void runLifecycle(tool.name, tool.installed ? 'upgrade' : 'install')}
+            disabled={lifecycleStatus[tool.name]?.state === 'running'}
+          >
+            {lifecycleStatus[tool.name]?.state === 'running'
+              ? lifecycleStatus[tool.name].action === 'install' ? t('agents.installing') : t('agents.upgrading')
+              : tool.installed ? t('agents.upgrade') : t('agents.install')}
+          </button>
           <button onClick={() => void apply(tool.name)} disabled={busy}>
             {busy ? t('agents.applying') : t('agents.apply')}
           </button>
           {status && status.state !== 'idle' && (
             <span className={`agent-apply-status ${status.state}`}>
               {status.message}
+            </span>
+          )}
+          {lifecycleStatus[tool.name] && lifecycleStatus[tool.name].state !== 'idle' && lifecycleStatus[tool.name].state !== 'running' && (
+            <span className={`agent-lifecycle-status ${lifecycleStatus[tool.name].state}`}>
+              {lifecycleStatus[tool.name].message}
             </span>
           )}
         </div>

@@ -90,6 +90,32 @@ func TestSidecarProviderLifecycle(t *testing.T) {
 	}
 }
 
+func TestSidecarToolInstallDryRun(t *testing.T) {
+	server := New(Options{Version: "test", Token: "secret"})
+	handler := server.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/tools/codex/install", bytes.NewBufferString(`{"dryRun":true}`))
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("install status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		Result desktop.OperationResult `json:"result"`
+		Tool   desktop.ToolDTO         `json:"tool"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if !payload.Result.OK || payload.Result.Message == "" {
+		t.Fatalf("unexpected result: %+v", payload.Result)
+	}
+	if payload.Tool.Command != "codex" {
+		t.Fatalf("tool = %+v, want codex command", payload.Tool)
+	}
+}
+
 func TestSidecarUsesDefaultStorePath(t *testing.T) {
 	server := New(Options{Version: "test", Token: "secret"})
 	req := httptest.NewRequest(http.MethodGet, "/api/providers", nil)

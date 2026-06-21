@@ -24,6 +24,11 @@ export type Tool = {
   version: string
 }
 
+export type ToolOperation = {
+  result: { ok: boolean; message: string; path?: string }
+  tool: Tool
+}
+
 export type MCPClient = {
   name: string
   userPath: string

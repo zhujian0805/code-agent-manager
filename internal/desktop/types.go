@@ -129,6 +129,11 @@ type ToolDTO struct {
 	Version     string `json:"version"`
 }
 
+type ToolOperationDTO struct {
+	Result OperationResult `json:"result"`
+	Tool   ToolDTO         `json:"tool"`
+}
+
 type LaunchPlanDTO struct {
 	Tool        ToolDTO           `json:"tool"`
 	Provider    ProviderDTO       `json:"provider"`
