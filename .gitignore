@@ -8,6 +8,7 @@ test_*.sh
 *_test.sh
 *__pycache__*
 .serena/
+.playwright-mcp/
 build
 *egg-info*
 .neovate
