@@ -73,43 +73,50 @@ func TestMCPAddRequiresClientFlag(t *testing.T) {
 	}
 }
 
-// Registry server install (no --command) resolves the bundled schema.
-func TestMCPAddRegistryServerResolvesBundledSchema(t *testing.T) {
+// Registry server install (no --command) resolves the catalog schema.
+func TestMCPAddRegistryServerResolvesCatalogSchema(t *testing.T) {
 	isolatedHome(t)
-	stdout, stderr, code := execute(t, "mcp", "add", "mem0-mcp", "--client", "claude")
+	writeMCPTestConfig(t)
+	stdout, stderr, code := execute(t, "mcp", "add", "test-mcp", "--client", "claude")
 	if code != 0 {
 		t.Fatalf("exit = %d; stderr=%s", code, stderr)
 	}
-	if !strings.Contains(stdout, "Added mem0-mcp to claude") {
+	if !strings.Contains(stdout, "Added test-mcp to claude") {
 		t.Fatalf("output unexpected:\n%s", stdout)
 	}
 }
 
-// `cam mcp server list` enumerates the bundled registry.
-func TestMCPServerListEnumeratesBundledRegistry(t *testing.T) {
+// `cam mcp server list` enumerates the catalog registry.
+func TestMCPServerListEnumeratesCatalogRegistry(t *testing.T) {
+	isolatedHome(t)
+	writeMCPTestConfig(t)
 	stdout, _, code := execute(t, "mcp", "server", "list")
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
-	if !strings.Contains(stdout, "mem0-mcp") {
-		t.Fatalf("server list missing mem0-mcp (truncated):\n%s", head(stdout, 200))
+	if !strings.Contains(stdout, "test-mcp") {
+		t.Fatalf("server list missing test-mcp (truncated):\n%s", head(stdout, 200))
 	}
 }
 
 // `cam mcp server search QUERY` finds matches.
 func TestMCPServerSearchFindsMatches(t *testing.T) {
-	stdout, _, code := execute(t, "mcp", "server", "search", "mem0")
+	isolatedHome(t)
+	writeMCPTestConfig(t)
+	stdout, _, code := execute(t, "mcp", "server", "search", "test")
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
-	if !strings.Contains(stdout, "mem0-mcp") {
-		t.Fatalf("search missing mem0-mcp (truncated):\n%s", head(stdout, 400))
+	if !strings.Contains(stdout, "test-mcp") {
+		t.Fatalf("search missing test-mcp (truncated):\n%s", head(stdout, 400))
 	}
 }
 
 // `cam mcp server show NAME` prints the schema JSON.
 func TestMCPServerShowEmitsSchemaJSON(t *testing.T) {
-	stdout, _, code := execute(t, "mcp", "server", "show", "mem0-mcp")
+	isolatedHome(t)
+	writeMCPTestConfig(t)
+	stdout, _, code := execute(t, "mcp", "server", "show", "test-mcp")
 	if code != 0 {
 		t.Fatalf("exit = %d", code)
 	}
@@ -117,7 +124,7 @@ func TestMCPServerShowEmitsSchemaJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &schema); err != nil {
 		t.Fatalf("show output not valid JSON: %v\n%s", err, stdout)
 	}
-	if schema["name"] != "mem0-mcp" {
+	if schema["name"] != "test-mcp" {
 		t.Fatalf("name = %v", schema["name"])
 	}
 }
@@ -152,5 +159,34 @@ func TestMCPAliasM(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "No MCP servers installed") {
 		t.Fatalf("alias m output:\n%s", stdout)
+	}
+}
+
+func writeMCPTestConfig(t *testing.T) {
+	t.Helper()
+	cfgDir := os.Getenv("CAM_CONFIG_DIR")
+	if cfgDir == "" {
+		t.Fatal("CAM_CONFIG_DIR must be set by isolatedHome")
+	}
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	catalogPath := filepath.Join(cfgDir, "mcp_servers.json")
+	catalog := `[
+  {
+    "name": "test-mcp",
+    "display_name": "Test MCP",
+    "description": "Test catalog MCP server",
+    "installations": {
+      "npm": {"type": "npm", "command": "npx", "args": ["-y", "test-mcp"]}
+    }
+  }
+]`
+	if err := os.WriteFile(catalogPath, []byte(catalog), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config := "repositories:\n  mcpServers:\n    sources:\n      - type: local\n        path: " + filepath.ToSlash(catalogPath) + "\ncache:\n  enabled: false\n"
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
