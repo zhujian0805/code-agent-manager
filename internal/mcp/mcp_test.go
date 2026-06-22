@@ -6,28 +6,130 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/chat2anyllm/code-agent-manager/internal/camconfig"
 	"github.com/chat2anyllm/code-agent-manager/internal/mcp"
 )
 
-func TestRegistryLoadsBundledSchemas(t *testing.T) {
-	r, err := mcp.LoadBundledRegistry()
-	if err != nil {
-		t.Fatalf("LoadBundledRegistry err = %v", err)
-	}
-	names := r.Names()
-	if len(names) < 100 {
-		t.Fatalf("expected at least 100 schemas, got %d", len(names))
-	}
-	if _, ok := r.Get("mem0-mcp"); !ok {
-		t.Fatal("expected mem0-mcp in bundled registry")
-	}
-}
-
 func TestRegistrySearchByDescription(t *testing.T) {
-	r, _ := mcp.LoadBundledRegistry()
+	path := filepath.Join(t.TempDir(), "mcp_servers.json")
+	writeCatalog(t, path, []mcp.ServerSchema{testSchema("memory-mcp", "Memory catalog server")})
+	r, err := mcp.LoadRegistryFromConfig(testCatalogConfig(path))
+	if err != nil {
+		t.Fatalf("LoadRegistryFromConfig err = %v", err)
+	}
 	results := r.Search("memory")
 	if len(results) == 0 {
 		t.Fatal("expected at least one server matching 'memory'")
+	}
+}
+
+func TestLoadRegistry_loadsDirectArrayFromLocalSource(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp_servers.json")
+	writeCatalog(t, path, []mcp.ServerSchema{testSchema("local-only", "Local only")})
+	cfg := testCatalogConfig(path)
+
+	// When
+	registry, err := mcp.LoadRegistryFromConfig(cfg)
+
+	// Then
+	if err != nil {
+		t.Fatalf("LoadRegistryFromConfig err = %v", err)
+	}
+	if _, ok := registry.Get("local-only"); !ok {
+		t.Fatal("expected local-only in catalog registry")
+	}
+}
+
+func TestLoadRegistry_loadsDirectMapFromLocalSource(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp_servers.json")
+	writeCatalog(t, path, map[string]mcp.ServerSchema{
+		"map-only": testSchema("map-only", "Map only"),
+	})
+	cfg := testCatalogConfig(path)
+
+	// When
+	registry, err := mcp.LoadRegistryFromConfig(cfg)
+
+	// Then
+	if err != nil {
+		t.Fatalf("LoadRegistryFromConfig err = %v", err)
+	}
+	if _, ok := registry.Get("map-only"); !ok {
+		t.Fatal("expected map-only in catalog registry")
+	}
+}
+
+func TestLoadRegistry_loadsWrappedCatalogFromLocalSource(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp_servers.json")
+	writeCatalog(t, path, map[string]any{
+		"schema_version": 1,
+		"servers":        []mcp.ServerSchema{testSchema("wrapped-only", "Wrapped only")},
+	})
+	cfg := testCatalogConfig(path)
+
+	// When
+	registry, err := mcp.LoadRegistryFromConfig(cfg)
+
+	// Then
+	if err != nil {
+		t.Fatalf("LoadRegistryFromConfig err = %v", err)
+	}
+	if _, ok := registry.Get("wrapped-only"); !ok {
+		t.Fatal("expected wrapped-only in catalog registry")
+	}
+}
+
+func TestLoadRegistry_keepsLocalEntryWhenRemoteDuplicatesName(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	localPath := filepath.Join(dir, "local.json")
+	remotePath := filepath.Join(dir, "remote.json")
+	writeCatalog(t, localPath, []mcp.ServerSchema{testSchema("duplicate", "Local description")})
+	writeCatalog(t, remotePath, []mcp.ServerSchema{testSchema("duplicate", "Remote description")})
+	cfg := camconfig.CamConfig{
+		Repositories: map[string]camconfig.RepoSources{
+			"mcpServers": {Sources: []camconfig.RepoSource{
+				{Type: "local", Path: localPath},
+				{Type: "local", Path: remotePath},
+			}},
+		},
+	}
+
+	// When
+	registry, err := mcp.LoadRegistryFromConfig(cfg)
+
+	// Then
+	if err != nil {
+		t.Fatalf("LoadRegistryFromConfig err = %v", err)
+	}
+	got, ok := registry.Get("duplicate")
+	if !ok {
+		t.Fatal("expected duplicate in catalog registry")
+	}
+	if got.Description != "Local description" {
+		t.Fatalf("description = %q, want local source priority", got.Description)
+	}
+}
+
+func TestLoadRegistry_rejectsMalformedInstallableSchema(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp_servers.json")
+	writeCatalog(t, path, []mcp.ServerSchema{{Name: "missing-installations", Description: "broken"}})
+	cfg := testCatalogConfig(path)
+
+	// When
+	_, err := mcp.LoadRegistryFromConfig(cfg)
+
+	// Then
+	if err == nil {
+		t.Fatal("expected malformed installable schema error")
 	}
 }
 
@@ -124,5 +226,34 @@ func TestAddServerMergesExistingFile(t *testing.T) {
 	}
 	if _, ok := got["mcpServers"]; !ok {
 		t.Fatalf("missing mcpServers: %v", got)
+	}
+}
+
+func testCatalogConfig(path string) camconfig.CamConfig {
+	return camconfig.CamConfig{
+		Repositories: map[string]camconfig.RepoSources{
+			"mcpServers": {Sources: []camconfig.RepoSource{{Type: "local", Path: path}}},
+		},
+	}
+}
+
+func testSchema(name, description string) mcp.ServerSchema {
+	return mcp.ServerSchema{
+		Name:        name,
+		Description: description,
+		Installations: map[string]mcp.InstallationEntry{
+			"npm": {Type: "npm", Command: "npx", Args: []string{"-y", name}},
+		},
+	}
+}
+
+func writeCatalog(t *testing.T, path string, catalog any) {
+	t.Helper()
+	raw, err := json.Marshal(catalog)
+	if err != nil {
+		t.Fatalf("marshal catalog: %v", err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write catalog: %v", err)
 	}
 }

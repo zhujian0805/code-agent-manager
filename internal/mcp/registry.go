@@ -1,24 +1,16 @@
 // Package mcp manages the Model Context Protocol server catalog and wires
 // servers into per-tool config files.
 //
-// The package embeds the bundled mcpm-style server schemas at compile time so
-// `cam mcp server list/search/show` work out of the box.  Per-client config
-// writers live in client.go and dispatch on tool name.
+// The package loads mcpm-style server schemas from configured catalog sources.
+// Per-client config writers live in client.go and dispatch on tool name.
 package mcp
 
 import (
-	"embed"
-	"encoding/json"
-	"fmt"
-	"io/fs"
 	"sort"
 	"strings"
 )
 
-//go:embed all:registry/servers
-var bundledRegistry embed.FS
-
-// ServerSchema mirrors the bundled mcpm-style JSON files.
+// ServerSchema mirrors the mcpm-style JSON files.
 type ServerSchema struct {
 	Name          string                       `json:"name"`
 	DisplayName   string                       `json:"display_name"`
@@ -52,41 +44,9 @@ type InstallationEntry struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
-// Registry exposes lookups against the bundled MCP server catalog.
+// Registry exposes lookups against the MCP server catalog.
 type Registry struct {
 	schemas map[string]ServerSchema
-}
-
-// LoadBundledRegistry parses every embedded JSON schema into a Registry.  The
-// load fails fast on the first malformed file so binary-time validation
-// surfaces drift between Python and Go.
-func LoadBundledRegistry() (*Registry, error) {
-	out := map[string]ServerSchema{}
-	err := fs.WalkDir(bundledRegistry, "registry/servers", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".json") {
-			return nil
-		}
-		data, err := bundledRegistry.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		var schema ServerSchema
-		if err := json.Unmarshal(data, &schema); err != nil {
-			return fmt.Errorf("mcp: parse %s: %w", path, err)
-		}
-		if schema.Name == "" {
-			return fmt.Errorf("mcp: schema missing name in %s", path)
-		}
-		out[schema.Name] = schema
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &Registry{schemas: out}, nil
 }
 
 // Get looks up a server by name.
