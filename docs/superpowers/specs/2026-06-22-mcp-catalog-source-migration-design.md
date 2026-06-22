@@ -44,6 +44,14 @@ CAM's MCP registry package should retain the existing registry abstraction where
 
 The current production dependency on `internal/mcp/registry/servers` should be removed. Tests may use small fixtures, but CAM should not keep a production embedded copy of all MCP server records.
 
+Key design decisions:
+
+- MCP catalog sources should use the same repository-source mental model as instructions, skills, agents, and plugins, rather than introducing a separate config system.
+- The registry API should stay stable for callers. Source loading is an implementation detail below the registry package.
+- CAM should support multiple source artifact shapes during the transition so `awesome-mcp-servers` can evolve its public dist format without forcing another CAM API change.
+- Local catalog sources must remain useful for development, private entries, and emergency overrides.
+- CAM should not auto-write migrated catalog data back into user config. User config only selects sources.
+
 ## Components
 
 ### `awesome-mcp-servers`
@@ -69,6 +77,34 @@ Each installable server record must preserve these fields when available:
 - `installations`
 - optional `arguments`
 
+Required fields for CAM installability are:
+
+- `name`
+- `description`
+- at least one usable installation entry
+
+`display_name` should default to `name` when omitted. Optional metadata should be preserved for search, display, and future desktop filtering, but missing optional metadata must not block installation.
+
+Recommended dist wrapper shape:
+
+```json
+{
+  "schema_version": 1,
+  "generated_at": "2026-06-22T00:00:00Z",
+  "source": "Chat2AnyLLM/awesome-mcp-servers",
+  "servers": [
+    {
+      "name": "example",
+      "display_name": "Example",
+      "description": "Example MCP server",
+      "installations": []
+    }
+  ]
+}
+```
+
+CAM should ignore wrapper metadata it does not understand, but it should reject a wrapper that lacks a recognizable server collection.
+
 ### CAM config
 
 Add an MCP catalog source section to CAM's bundled/user config model. The default should mirror other catalogs: local override first, remote source second.
@@ -87,6 +123,16 @@ repositories:
 
 Use `code_agent_manager` paths if package/config files need to be updated. Do not introduce new references to the old `code_assistant_manager` package path.
 
+Config semantics:
+
+- `repositories.mcpServers.sources` is optional for backwards compatibility.
+- If the user config omits MCP sources, CAM falls back to the bundled default config.
+- If both user and bundled config define MCP sources, the user config wins in the same way existing repository-source settings win.
+- Relative local paths should resolve consistently with existing repository-source behavior.
+- The remote URL should point at a versioned or branch-based dist artifact from `Chat2AnyLLM/awesome-mcp-servers`; the first implementation can use `main` if that matches other CAM defaults.
+
+Do not add per-command flags for catalog source selection in this migration. Source selection belongs in CAM config so CLI and desktop behavior stays consistent.
+
 ### CAM MCP loader
 
 Replace `LoadBundledRegistry` usage with a source-backed loader, for example `LoadRegistry`.
@@ -101,6 +147,28 @@ The loader should:
 - return clear errors for malformed sources
 
 Local sources have priority. Remote sources fill missing entries but do not override local entries.
+
+Loader responsibilities in more detail:
+
+1. Resolve MCP source config from `camconfig`.
+2. For each source, read bytes from local disk or remote cache/network.
+3. Decode JSON into one of the supported source artifact shapes.
+4. Normalize every decoded record into `ServerSchema`.
+5. Validate required installable fields.
+6. Merge by canonical server name, preserving the first valid record.
+7. Return a `Registry` with deterministic ordering from the merged map.
+
+Canonical names should use the existing registry naming rules. If the current registry treats names case-sensitively, keep that behavior unless tests demonstrate otherwise. Search behavior should continue matching the existing `Registry.Search` semantics.
+
+Supported artifact shapes:
+
+- direct array: `[{...server...}]`
+- direct map: `{ "server-name": {...server...} }`
+- wrapped object with one of these collection keys: `servers`, `items`, or `data`
+
+When loading a direct map, the map key may supply `name` only when the record omits `name`. If both are present and conflict, fail that record/source instead of guessing.
+
+Remote caching should reuse existing cache directory, TTL, and fetch behavior used by other configured repository sources where possible. Avoid introducing a separate HTTP/cache implementation unless the existing abstraction cannot handle plain JSON artifacts.
 
 ### CLI and desktop
 
@@ -122,6 +190,31 @@ Manual MCP operations that do not require the catalog must keep working offline:
 - `cam mcp add --command ...`
 - `cam mcp add --url ...`
 - `cam mcp remove`
+
+User-facing wording should consistently distinguish:
+
+- **catalog servers**: installable definitions loaded from configured catalog sources
+- **installed servers**: entries already present in a client config
+- **custom servers**: manually added command or URL entries
+
+Avoid saying the registry is "bundled" in CLI help, errors, desktop labels, or tests once the production embedded registry is removed.
+
+## Compatibility and migration behavior
+
+This migration should be source-compatible for existing CLI and desktop callers where practical:
+
+- Existing commands and method names remain available.
+- Existing output DTO shapes remain available.
+- Existing installed MCP server configs are not rewritten.
+- Existing manual MCP add/remove/list behavior is unchanged.
+- Existing registry install behavior should produce the same client config entry for the same server definition.
+
+Expected user-visible change:
+
+- Registry/list/search/install commands now depend on configured catalog sources instead of the embedded production registry.
+- Error messages reference catalog loading failures instead of bundled registry failures.
+
+If users rely on offline registry access, they should configure a local catalog JSON source or rely on a fresh remote cache. This design does not require CAM to ship a full production fallback copy inside the binary.
 
 ## Data flow
 
@@ -150,6 +243,15 @@ Manual MCP operations that do not require the catalog must keep working offline:
 3. Wire CAM to load the dist artifact from configured sources.
 4. Remove CAM's production embedded MCP server record directory.
 
+Data migration checklist:
+
+- Preserve all 381 existing CAM records unless an individual record is known to be invalid.
+- Preserve server names exactly to avoid breaking scripts that install by name.
+- Preserve installation order inside each server because `PreferredInstallation` may depend on it.
+- Preserve package manager command/args/env fields without shell re-interpretation.
+- Keep provenance in `awesome-mcp-servers` commit history rather than adding CAM-only migration metadata to each record.
+- Compare generated `dist/servers.json` against CAM's current registry count before removing embedded production data.
+
 ## Error handling
 
 - Missing local source: skip it.
@@ -161,6 +263,54 @@ Manual MCP operations that do not require the catalog must keep working offline:
 - Installed-server operations: continue to work without the catalog when they only read/write local MCP client configs.
 
 Avoid silently dropping malformed installable records. A broken catalog should be visible during registry operations so users do not install incomplete MCP definitions.
+
+Error messages should include:
+
+- source type and path/URL
+- JSON shape problem, parse problem, or validation problem
+- server name when the error is record-specific
+- whether CAM attempted cache fallback for remote sources
+
+Do not include secrets from environment variables, request headers, or private local paths beyond the configured catalog path itself.
+
+## Implementation plan
+
+1. Add MCP source config fields and bundled defaults under the existing CAM config model.
+2. Add a source-backed MCP registry loader behind the existing registry abstraction.
+3. Update CLI and desktop registry call sites from `LoadBundledRegistry` to the new loader.
+4. Import/migrate CAM MCP records into `awesome-mcp-servers` and ensure its dist build emits CAM-installable fields.
+5. Point CAM's bundled default MCP catalog source at the published `awesome-mcp-servers` dist artifact.
+6. Replace production embedded registry data with small test fixtures only.
+7. Update tests, CLI help, desktop labels, docs, and README wording from bundled registry to catalog registry.
+8. Run required CAM and `awesome-mcp-servers` verification.
+
+Implementation should keep each step separately reviewable. Do not combine data migration, loader changes, and wording cleanup into one hard-to-review patch if avoidable.
+
+## Acceptance criteria
+
+- CAM production code no longer imports or embeds `internal/mcp/registry/servers` as the full MCP catalog.
+- CAM default config includes `Chat2AnyLLM/awesome-mcp-servers` as the remote MCP catalog source.
+- CAM can load MCP catalog records from local JSON, remote JSON, and cached remote JSON.
+- CAM accepts direct array, direct map, and wrapped dist catalog shapes.
+- Local source entries override remote entries by server name.
+- CLI registry list/search/show/add behavior remains functionally equivalent for migrated records.
+- Desktop registry search/list/show/install behavior keeps the same DTO contracts.
+- Manual installed/custom MCP operations work without catalog access.
+- User-facing registry wording no longer claims the full registry is bundled.
+- `awesome-mcp-servers` contains the migrated CAM records and can build/validate the published dist artifact.
+
+## Risks and mitigations
+
+- **Remote catalog unavailable**: reuse existing cache behavior and support local override sources.
+- **Schema drift between repos**: accept multiple artifact wrapper shapes and validate only CAM-required installable fields.
+- **Record loss during migration**: compare server counts and names before removing CAM's embedded production records.
+- **Different install output after migration**: preserve installation arrays and verify representative installs through CLI tests.
+- **User confusion about offline behavior**: update help/errors/docs to explain configured catalog sources and cache fallback.
+- **Duplicated source-loading code**: prefer existing repository-source/cache abstractions so MCP follows the same pattern as other CAM catalogs.
+
+## Rollback plan
+
+If the source-backed loader causes production breakage before release, rollback should restore the previous `LoadBundledRegistry` call path and embedded production data while keeping the migrated `awesome-mcp-servers` data intact. After release, rollback should instead be done by updating the configured catalog source to a known-good local or remote artifact, because CAM should no longer own the production catalog copy.
 
 ## Testing
 
