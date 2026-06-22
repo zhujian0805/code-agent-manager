@@ -141,9 +141,7 @@ export function Prompts() {
 
 function sourceLabel(source: string): string {
   switch (source) {
-    case 'claude': return 'Claude'
-    case 'prompts_chat': return 'prompts.chat'
-    case 'promptingguide': return 'Guide'
+    case 'awesome_prompts': return 'Awesome Prompts'
     default: return source
   }
 }

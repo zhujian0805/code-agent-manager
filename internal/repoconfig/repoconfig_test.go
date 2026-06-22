@@ -18,10 +18,6 @@ func TestBundledSkillRepos(t *testing.T) {
 	if len(repos) == 0 {
 		t.Fatal("expected at least one bundled skill repo")
 	}
-	// Check a known entry from the bundled file.
-	if _, ok := repos["obra/superpowers"]; !ok {
-		t.Error("expected obra/superpowers in bundled skill repos")
-	}
 	if got := repos["Chat2AnyLLM/awesome-claude-skills"].CatalogFile; got != "FULL-SKILLS.md" {
 		t.Errorf("expected Chat2AnyLLM/awesome-claude-skills catalogFile FULL-SKILLS.md, got %q", got)
 	}
@@ -35,8 +31,8 @@ func TestBundledAgentRepos(t *testing.T) {
 	if len(repos) == 0 {
 		t.Fatal("expected at least one bundled agent repo")
 	}
-	if _, ok := repos["iannuttall/claude-agents"]; !ok {
-		t.Error("expected iannuttall/claude-agents in bundled agent repos")
+	if _, ok := repos["Chat2AnyLLM/awesome-claude-agents"]; !ok {
+		t.Error("expected Chat2AnyLLM/awesome-claude-agents in bundled agent repos")
 	}
 }
 
@@ -48,8 +44,8 @@ func TestBundledPluginRepos(t *testing.T) {
 	if len(repos) == 0 {
 		t.Fatal("expected at least one bundled plugin repo")
 	}
-	if _, ok := repos["superpowers-marketplace"]; !ok {
-		t.Error("expected superpowers-marketplace in bundled plugin repos")
+	if _, ok := repos["chat2anyllm-awesome-claude-plugins"]; !ok {
+		t.Error("expected chat2anyllm-awesome-claude-plugins in bundled plugin repos")
 	}
 }
 
@@ -65,8 +61,8 @@ func TestBundledPromptReposReturnsEmpty(t *testing.T) {
 		t.Fatal("expected at least one bundled prompt repo")
 	}
 	// Check a known entry.
-	if _, ok := repos["anthropics/claude-code"]; !ok {
-		t.Error("expected anthropics/claude-code in bundled prompt repos")
+	if _, ok := repos["Chat2AnyLLM/awesome-prompts"]; !ok {
+		t.Error("expected Chat2AnyLLM/awesome-prompts in bundled prompt repos")
 	}
 }
 

@@ -16,10 +16,16 @@ func newAPITestHandler(t *testing.T) http.Handler {
 	t.Helper()
 	dir := t.TempDir()
 	home := t.TempDir()
+	promptsAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"version":"1.0.0","prompts":[{"slug":"api-test","title":"API Test","description":"API prompt","prompt":"Do API work","tags":["api"],"category":"test","author":"test","variables":[]}]}`))
+	}))
+	t.Cleanup(promptsAPI.Close)
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("CAM_CONFIG_DIR", dir)
 	t.Setenv("CAM_CACHE_DIR", filepath.Join(dir, "cache"))
+	t.Setenv("CAM_AWESOME_PROMPTS_URL", promptsAPI.URL)
 	dbPath := filepath.Join(dir, "cam.db")
 	t.Setenv("CAM_DB_PATH", dbPath)
 	server := New(Options{Version: "test"})
@@ -107,7 +113,7 @@ func TestSidecarCoreAPIRoutes(t *testing.T) {
 		{"prompts list", http.MethodGet, "/api/prompts", "", http.StatusOK},
 		{"prompts search", http.MethodGet, "/api/prompts/search?q=Prompt", "", http.StatusOK},
 		{"prompts sources", http.MethodGet, "/api/prompts/sources", "", http.StatusOK},
-		{"prompts sync claude", http.MethodPost, "/api/prompts/sync", `{"source":"claude"}`, http.StatusOK},
+		{"prompts sync awesome", http.MethodPost, "/api/prompts/sync", `{"source":"awesome_prompts"}`, http.StatusOK},
 		{"provider delete", http.MethodDelete, "/api/providers/local", "", http.StatusOK},
 	}
 

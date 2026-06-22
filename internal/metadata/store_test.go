@@ -221,7 +221,7 @@ func TestSearchPrefersNonCatalogRepoOverCatalogRepo(t *testing.T) {
 
 	// Neither is official, but one is a catalog repo (awesome-*). The real repo wins.
 	upsertSkill(t, ctx, s, "skill-creator", "daymade", "claude-code-skills", "daymade/claude-code-skills:skill-creator")
-	upsertSkill(t, ctx, s, "skill-creator", "ComposioHQ", "awesome-claude-skills", "ComposioHQ/awesome-claude-skills:skill-creator")
+	upsertSkill(t, ctx, s, "skill-creator", "Chat2AnyLLM", "awesome-claude-skills", "Chat2AnyLLM/awesome-claude-skills:skill-creator")
 
 	results, _ := s.Search(ctx, SearchQuery{Query: "skill-creator", Kind: "skill"})
 	if len(results) != 1 {

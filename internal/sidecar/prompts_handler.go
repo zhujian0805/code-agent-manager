@@ -3,7 +3,6 @@ package sidecar
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/chat2anyllm/code-agent-manager/internal/prompts"
 )
@@ -127,18 +126,4 @@ func (s *Server) handlePromptsSources(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(statuses)
-}
-
-// promptSourceDisplayName returns a human-readable name for a prompt source.
-func promptSourceDisplayName(source string) string {
-	switch strings.ToLower(source) {
-	case "claude":
-		return "Claude Prompt Library"
-	case "prompts_chat", "prompts.chat":
-		return "prompts.chat"
-	case "promptingguide", "promptingguide.ai":
-		return "Prompt Engineering Guide"
-	default:
-		return source
-	}
 }

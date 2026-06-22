@@ -21,7 +21,7 @@ func seedMetadataDB(t *testing.T, dbPath string) {
 	}
 	items := []metadata.Item{
 		{Kind: "skill", Name: "superpowers", Description: "Skill bundle", RepoOwner: "obra", RepoName: "superpowers", RepoBranch: "main", InstallKey: "obra/superpowers:superpowers", TargetApps: "claude,codex"},
-		{Kind: "agent", Name: "code-reviewer", Description: "Reviews code", RepoOwner: "iannuttall", RepoName: "claude-agents", RepoBranch: "main", InstallKey: "iannuttall/claude-agents:code-reviewer", TargetApps: "claude"},
+		{Kind: "agent", Name: "code-reviewer", Description: "Reviews code", RepoOwner: "Chat2AnyLLM", RepoName: "awesome-claude-agents", RepoBranch: "main", InstallKey: "Chat2AnyLLM/awesome-claude-agents:code-reviewer", TargetApps: "claude"},
 	}
 	for _, it := range items {
 		if err := store.UpsertItem(ctx, it); err != nil {

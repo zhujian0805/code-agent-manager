@@ -2,86 +2,133 @@ package prompts
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-// TestClaudeLibraryEmbedded verifies the bundled Claude prompt library loads,
-// has the expected size, and that every entry carries real content (the old
-// implementation shipped placeholders with empty Content).
-func TestClaudeLibraryEmbedded(t *testing.T) {
+func TestAwesomePromptsEmbedded_hasRequiredPromptFields(t *testing.T) {
+	// Given
 	svc := NewService()
-	prompts, err := svc.FetchClaudePrompts(context.Background())
+
+	// When
+	prompts, err := svc.FetchAwesomePrompts(context.Background())
+
+	// Then
 	if err != nil {
-		t.Fatalf("FetchClaudePrompts: %v", err)
+		t.Fatalf("FetchAwesomePrompts: %v", err)
 	}
-	if len(prompts) != 52 {
-		t.Fatalf("expected 52 Claude prompts, got %d", len(prompts))
+	if len(prompts) != 3 {
+		t.Fatalf("expected 3 awesome prompts, got %d", len(prompts))
 	}
 	for _, p := range prompts {
+		if strings.TrimSpace(p.Slug) == "" {
+			t.Errorf("prompt with empty slug: %+v", p)
+		}
 		if strings.TrimSpace(p.Title) == "" {
 			t.Errorf("prompt with empty title: %+v", p)
 		}
-		if strings.TrimSpace(p.Content) == "" {
+		if strings.TrimSpace(p.Prompt) == "" {
 			t.Errorf("prompt %q has empty content", p.Title)
 		}
 	}
 }
 
-// TestSyncClaudeLibraryStoresAll is the regression test for the "Claude Prompt
-// Library shows 0" bug: syncing must store every prompt (unique source_url means
-// no collisions on the (source, source_url) index) and SyncAll must include it.
-func TestSyncClaudeLibraryStoresAll(t *testing.T) {
+func TestSyncAll_storesAwesomePrompts_whenRemoteUnavailable(t *testing.T) {
+	// Given
 	dir := t.TempDir()
 	t.Setenv("CAM_CONFIG_DIR", dir)
 	ctx := context.Background()
 	svc := NewService()
+	svc.sourceURL = "http://127.0.0.1:1/prompts.json"
 
-	n, err := svc.syncClaudeLibrary(ctx)
+	// When
+	n, err := svc.SyncAll(ctx)
+
+	// Then
 	if err != nil {
-		t.Fatalf("syncClaudeLibrary: %v", err)
+		t.Fatalf("SyncAll: %v", err)
 	}
-	if n != 52 {
-		t.Fatalf("expected 52 prompts synced, got %d", n)
+	if n != 3 {
+		t.Fatalf("expected 3 prompts synced, got %d", n)
 	}
 
-	count, err := svc.store.CountPrompts(ctx, "claude", "")
+	count, err := svc.store.CountPrompts(ctx, "awesome_prompts", "")
 	if err != nil {
 		t.Fatalf("CountPrompts: %v", err)
 	}
-	if count != 52 {
-		t.Fatalf("expected 52 claude prompts stored, got %d (source_url collision?)", count)
+	if count != 3 {
+		t.Fatalf("expected 3 awesome prompts stored, got %d", count)
 	}
 }
 
-// TestSlugifyUnique guards the root cause of the collisions: distinct titles must
-// produce distinct slugs so their source_urls don't clash.
-func TestSlugifyUnique(t *testing.T) {
-	cases := map[string]string{
-		"Get oriented in a new repository": "get-oriented-in-a-new-repository",
-		"Fix a precise visual bug":         "fix-a-precise-visual-bug",
-		"  Trim  me  ":                     "trim-me",
-		"Already-slugged":                  "already-slugged",
+func TestSyncAll_mapsRemoteAwesomePromptsFields(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	t.Setenv("CAM_CONFIG_DIR", dir)
+	ctx := context.Background()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"version":"1.0.0","prompts":[{"slug":"custom","title":"Custom Prompt","description":"Custom description","prompt":"Do custom work","tags":["one","two"],"category":"custom-category","author":"tester","variables":[]}]}`))
+	}))
+	defer server.Close()
+	svc := NewService()
+	svc.sourceURL = server.URL
+
+	// When
+	n, err := svc.SyncAll(ctx)
+
+	// Then
+	if err != nil {
+		t.Fatalf("SyncAll: %v", err)
 	}
-	for in, want := range cases {
-		if got := slugify(in); got != want {
-			t.Errorf("slugify(%q) = %q, want %q", in, got, want)
+	if n != 1 {
+		t.Fatalf("expected 1 prompt synced, got %d", n)
+	}
+	stored, err := svc.store.ListPrompts(ctx, "awesome_prompts", "")
+	if err != nil {
+		t.Fatalf("ListPrompts: %v", err)
+	}
+	if len(stored) != 1 {
+		t.Fatalf("expected 1 stored prompt, got %d", len(stored))
+	}
+	p := stored[0]
+	if p.SourceURL != "https://github.com/Chat2AnyLLM/awesome-prompts/blob/master/prompts/custom.yaml" {
+		t.Fatalf("SourceURL = %q", p.SourceURL)
+	}
+	if p.Title != "Custom Prompt" || p.Description != "Custom description" || p.Content != "Do custom work" || p.Tags != "one, two" || p.Category != "custom-category" || p.Author != "tester" {
+		t.Fatalf("unexpected prompt mapping: %+v", p)
+	}
+}
+
+func TestSyncAll_removesRetiredPromptSources(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	t.Setenv("CAM_CONFIG_DIR", dir)
+	ctx := context.Background()
+	svc := NewService()
+	svc.sourceURL = "http://127.0.0.1:1/prompts.json"
+	for _, source := range []string{"claude", "prompts_chat", "promptingguide"} {
+		if err := svc.store.UpsertPrompt(ctx, &Prompt{Source: source, SourceURL: source + "://old", Title: "old", Content: "old"}); err != nil {
+			t.Fatalf("UpsertPrompt(%s): %v", source, err)
 		}
 	}
-}
 
-// TestParsePromptsFromMarkdownStripsFences verifies the markdown parser no longer
-// leaves stray ``` fences in extracted prompt content.
-func TestParsePromptsFromMarkdownStripsFences(t *testing.T) {
-	md := "## Text Summarization\nIntro text.\n\n*Prompt:*\n```\nExplain antibiotics\n\nA:\n```\n\n*Output:*\n```\nsome output\n```\n"
-	got := parsePromptsFromMarkdown(md)
-	if len(got) != 1 {
-		t.Fatalf("expected 1 prompt, got %d", len(got))
+	// When
+	_, err := svc.SyncAll(ctx)
+
+	// Then
+	if err != nil {
+		t.Fatalf("SyncAll: %v", err)
 	}
-	if strings.Contains(got[0].Content, "```") {
-		t.Errorf("content still contains code fence: %q", got[0].Content)
-	}
-	if !strings.Contains(got[0].Content, "Explain antibiotics") {
-		t.Errorf("content missing prompt body: %q", got[0].Content)
+	for _, source := range []string{"claude", "prompts_chat", "promptingguide"} {
+		count, err := svc.store.CountPrompts(ctx, source, "")
+		if err != nil {
+			t.Fatalf("CountPrompts(%s): %v", source, err)
+		}
+		if count != 0 {
+			t.Fatalf("expected retired source %s removed, got %d", source, count)
+		}
 	}
 }

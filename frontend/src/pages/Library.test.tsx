@@ -61,9 +61,9 @@ describe('Library page', () => {
 
   it('links each resource name to its source file on GitHub', async () => {
     render(<Library kind="agent" />)
-    // The mock agent lives at agents/code-reviewer.md in iannuttall/claude-agents.
+    // The mock agent lives at agents/code-reviewer.md in Chat2AnyLLM/awesome-claude-agents.
     const link = await screen.findByRole('link', { name: /code-reviewer/i })
-    expect(link).toHaveAttribute('href', 'https://github.com/iannuttall/claude-agents/blob/main/agents/code-reviewer.md')
+    expect(link).toHaveAttribute('href', 'https://github.com/Chat2AnyLLM/awesome-claude-agents/blob/main/agents/code-reviewer.md')
     expect(link).toHaveAttribute('target', '_blank')
   })
 

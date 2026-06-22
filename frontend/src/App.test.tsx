@@ -26,7 +26,7 @@ describe('App shell', () => {
     expect(await screen.findByRole('heading', { name: /subagents/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /plugins/i }))
-    expect(await screen.findByRole('heading', { name: /plugins/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /^plugins$/i })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /configuration/i }))
     expect(await screen.findByRole('heading', { name: /configuration/i })).toBeInTheDocument()

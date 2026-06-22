@@ -10,10 +10,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// Prompt represents a single prompt from any source.
+// Prompt represents a single prompt from Chat2AnyLLM/awesome-prompts.
 type Prompt struct {
 	ID          int64     `json:"id"`
-	Source      string    `json:"source"`      // "claude", "prompts_chat", "promptingguide"
+	Source      string    `json:"source"`      // "awesome_prompts"
 	SourceURL   string    `json:"source_url"`  // original URL
 	Category    string    `json:"category"`    // e.g. "coding", "writing", "analysis"
 	Title       string    `json:"title"`       // display name
@@ -222,4 +222,26 @@ func (s *Store) CountPrompts(ctx context.Context, source, category string) (int,
 	var count int
 	err = db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
+}
+
+// DeletePromptsBySources removes prompts that belong to retired sources.
+func (s *Store) DeletePromptsBySources(ctx context.Context, sources []string) error {
+	if len(sources) == 0 {
+		return nil
+	}
+	if err := s.Init(ctx); err != nil {
+		return err
+	}
+	db, err := s.open()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	for _, source := range sources {
+		if _, err := db.ExecContext(ctx, `DELETE FROM prompts WHERE source = ?`, source); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -41,9 +41,9 @@ export const mockDoctorChecks: DoctorCheck[] = [
 
 export const mockMetadataItems: MetadataItem[] = [
   { kind: 'skill', name: 'golang-testing', description: 'Go testing guidance', install_key: 'obra/superpowers:golang-testing', repo_owner: 'obra', repo_name: 'superpowers', repo_branch: 'main', item_path: 'skills/golang-testing', target_apps: 'claude,codex', installed_apps: ['claude'], installed: true },
-  { kind: 'agent', name: 'code-reviewer', description: 'Review code changes', install_key: 'iannuttall/claude-agents:code-reviewer', repo_owner: 'iannuttall', repo_name: 'claude-agents', repo_branch: 'main', item_path: 'agents/code-reviewer.md', target_apps: 'claude', installed_apps: [], installed: false },
+  { kind: 'agent', name: 'code-reviewer', description: 'Review code changes', install_key: 'Chat2AnyLLM/awesome-claude-agents:code-reviewer', repo_owner: 'Chat2AnyLLM', repo_name: 'awesome-claude-agents', repo_branch: 'main', item_path: 'agents/code-reviewer.md', target_apps: 'claude', installed_apps: [], installed: false },
   { kind: 'instruction', name: 'summarize', description: 'Summarize long text', install_key: 'anthropics/prompts:summarize', repo_owner: 'anthropics', repo_name: 'prompts', repo_branch: 'main', item_path: 'prompts/summarize.md', target_apps: 'claude,codex', installed_apps: [], installed: false },
-  { kind: 'plugin', name: 'superpowers-marketplace', description: 'Curated Claude Code plugins', install_key: 'obra/superpowers-marketplace:superpowers-marketplace', repo_owner: 'obra', repo_name: 'superpowers-marketplace', repo_branch: 'main', item_path: 'superpowers-marketplace', target_apps: 'claude', installed_apps: [], installed: false },
+  { kind: 'plugin', name: 'awesome-claude-plugins', description: 'Generated catalog of Claude plugins and marketplaces', install_key: 'Chat2AnyLLM/awesome-claude-plugins:awesome-claude-plugins', repo_owner: 'Chat2AnyLLM', repo_name: 'awesome-claude-plugins', repo_branch: 'main', item_path: 'README.md', target_apps: 'claude', installed_apps: [], installed: false },
 ]
 
 export const mockTargets: Record<string, string[]> = {
