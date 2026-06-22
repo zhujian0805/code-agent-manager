@@ -88,6 +88,7 @@
   "library.detailFailed": "Could not load details.",
   "library.manifestPath": "Source: {{path}}",
   "library.pagination": "Page {{current}} of {{total}} ({{count}} total)",
+  "library.pageOf": "Page {{page}} of {{total}}",
   "library.previous": "Previous",
   "library.next": "Next",
   "library.uninstall": "Uninstall",

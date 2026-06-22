@@ -88,6 +88,7 @@
   "library.detailFailed": "无法加载详情。",
   "library.manifestPath": "来源：{{path}}",
   "library.pagination": "第 {{current}} / {{total}} 页（共 {{count}} 项）",
+  "library.pageOf": "第 {{page}} / {{total}} 页",
   "library.previous": "上一页",
   "library.next": "下一页",
   "library.uninstall": "卸载",

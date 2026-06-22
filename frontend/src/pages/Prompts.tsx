@@ -128,7 +128,7 @@ export function Prompts() {
     {totalPages > 1 && (
       <div className="pagination">
         <button onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))} disabled={offset === 0}>
-          {t('library.prev')}
+          {t('library.previous')}
         </button>
         <span>{t('library.pageOf', { page: Math.floor(offset / PAGE_SIZE) + 1, total: totalPages })}</span>
         <button onClick={() => setOffset(Math.min(offset + PAGE_SIZE, items.length))} disabled={offset + PAGE_SIZE >= items.length}>
