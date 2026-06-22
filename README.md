@@ -149,15 +149,16 @@ CAM uses these main configuration files:
 
 - `~/.config/code-agent-manager/cam.db`: SQLite app state database that stores providers and other state.
 - `~/.env`: API keys and sensitive environment variables.
-- `~/.config/code-agent-manager/config.yaml`: repository-source config for instructions, skills, agents, and plugins.
+- `~/.config/code-agent-manager/config.yaml`: repository-source config for instructions, skills, agents, plugins, and MCP server catalogs.
 
-### How `config.yaml` is used for instruction/skill/agent/plugin repos
+### How `config.yaml` is used for instruction/skill/agent/plugin/MCP sources
 
 - CAM loads `~/.config/code-agent-manager/config.yaml` first; if missing, it falls back to the bundled Go config at `internal/camconfig/embed/config.yaml`.
-- The file defines source lists for `instructions`, `skills`, `agents`, and `plugins`.
+- The file defines source lists for `instructions`, `skills`, `agents`, `plugins`, and `mcpServers`.
 - Local JSON sources (`instruction_repos.json`, `skill_repos.json`, `agent_repos.json`, `plugin_repos.json`) are loaded first.
 - Remote sources are merged after local sources and do not override existing local keys.
 - Remote responses are cached in `~/.cache/code-agent-manager/repos` (TTL controlled by `config.yaml`).
+- MCP server catalog sources default to a local override at `~/.config/code-agent-manager/mcp_servers.json`, then the `Chat2AnyLLM/awesome-mcp-servers` remote dist artifact.
 
 ---
 
@@ -180,7 +181,7 @@ CAM solves this by providing a single, consistent interface to manage everything
 - **Unified Management:** One tool (`cam`) to install, configure, and run all your AI assistants
 - **Centralized Configuration:** Manage API keys with environment variables in `.env` and persist provider settings in CAM's SQLite app state
 - **Interactive TUI:** A polished, interactive menu (`cam launch`) for easy navigation and operation with arrow-key navigation
-- **MCP Registry:** Built-in registry with **381 pre-configured MCP servers** ready to install across all supported tools
+- **MCP Catalog Registry:** Source-backed catalog with **381+ pre-configured MCP servers** ready to install across all supported tools
 - **Extensible Framework:** Standardized architecture for managing agents, instructions, skills, and plugins
 
 ### Supported AI Assistants

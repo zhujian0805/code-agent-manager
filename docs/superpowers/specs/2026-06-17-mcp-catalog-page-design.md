@@ -10,7 +10,7 @@ multi-select dropdown to install into more agents.
 
 Most of the machinery already exists:
 
-- A bundled MCP server catalog: 381 schemas in `internal/mcp/registry/servers/`
+- A source-backed MCP server catalog loaded from configured `mcpServers` sources
   (`ServerSchema` with name, description, categories, tags, `installations`, and
   an `arguments` map of `NAME → {description, required, example}`).
 - `Registry.Search/Get/Names`, `ServerSchema.PreferredInstallation()`, and
@@ -88,7 +88,7 @@ Reuse the existing `ExpandableTable`, `MultiSelect`, and `Page` components so th
 look/feel matches Skills exactly.
 
 - **Top bar:** search input + search button + "Installed only" toggle (same as
-  Library). No Refresh button — the catalog is bundled, not fetched.
+  Library). No Refresh button — the catalog is loaded through CAM's configured catalog sources and cache.
 - **Columns:** Name | Repo (link to `repository.url`) | Installed (client
   badges, or "Not installed") | Actions (MultiSelect of clients + Install).
 - **Install action:** on click, if the row has `required_arguments`, expand an
