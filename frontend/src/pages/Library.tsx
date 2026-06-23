@@ -178,11 +178,14 @@ export function Library({ kind }: LibraryProps) {
 
   const columns: Column<MetadataItem>[] = [
     { header: 'Name', cell: (item) => (
-      <h3 className="row-name">
-        <a className="source-link" href={sourceUrl(item)} target="_blank" rel="noopener noreferrer" title={`Open ${item.name} source on GitHub`}>
-          {item.name}
-        </a>
-      </h3>
+      <div>
+        <h3 className="row-name">
+          <a className="source-link" href={sourceUrl(item)} target="_blank" rel="noopener noreferrer" title={`Open ${item.name} source on GitHub`}>
+            {item.name}
+          </a>
+        </h3>
+        {item.description && <p className="row-description">{item.description}</p>}
+      </div>
     ) },
     { header: 'Repo', cell: (item) => (
       <a className="repo-link" href={repoUrl(item.repo_owner, item.repo_name, item.repo_branch)} target="_blank" rel="noopener noreferrer" title={`Open ${item.repo_owner}/${item.repo_name} on GitHub`}>

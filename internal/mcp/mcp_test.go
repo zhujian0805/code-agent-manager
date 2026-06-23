@@ -1,14 +1,29 @@
 package mcp_test
 
 import (
+	"database/sql"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/chat2anyllm/code-agent-manager/internal/camconfig"
 	"github.com/chat2anyllm/code-agent-manager/internal/mcp"
+	_ "modernc.org/sqlite"
 )
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "cam-mcp-tests-*")
+	if err != nil {
+		panic(err)
+	}
+	_ = os.Setenv("CAM_DB_PATH", filepath.Join(dir, "cam.db"))
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
 
 func TestRegistrySearchByDescription(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_servers.json")
@@ -85,6 +100,39 @@ func TestLoadRegistry_loadsWrappedCatalogFromLocalSource(t *testing.T) {
 	}
 }
 
+func TestLoadRegistry_loadsWrappedCatalogWhenOneAuthorIsString(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp_servers.json")
+	writeCatalog(t, path, map[string]any{
+		"version":      "1.0",
+		"generated_at": "2026-06-23T00:00:00Z",
+		"count":        1,
+		"servers": []map[string]any{
+			{
+				"name":        "string-author",
+				"description": "Catalog server with author encoded as a string",
+				"author":      "Catalog Maintainer",
+				"installations": map[string]any{
+					"npm": map[string]any{"type": "npm", "command": "npx", "args": []string{"-y", "string-author"}},
+				},
+			},
+		},
+	})
+	cfg := testCatalogConfig(path)
+
+	// When
+	registry, err := mcp.LoadRegistryFromConfig(cfg)
+
+	// Then
+	if err != nil {
+		t.Fatalf("LoadRegistryFromConfig err = %v", err)
+	}
+	if _, ok := registry.Get("string-author"); !ok {
+		t.Fatal("expected string-author in catalog registry")
+	}
+}
+
 func TestLoadRegistry_keepsLocalEntryWhenRemoteDuplicatesName(t *testing.T) {
 	// Given
 	dir := t.TempDir()
@@ -114,6 +162,68 @@ func TestLoadRegistry_keepsLocalEntryWhenRemoteDuplicatesName(t *testing.T) {
 	}
 	if got.Description != "Local description" {
 		t.Fatalf("description = %q, want local source priority", got.Description)
+	}
+}
+
+func TestLoadRegistry_loadsRemoteConfigYamlCatalog(t *testing.T) {
+	// Given
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/config.yaml":
+			w.Header().Set("Content-Type", "text/yaml")
+			_, _ = w.Write([]byte("output:\n  dir: dist\n  formats: [json]\n"))
+		case "/dist/servers.json":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"servers": []mcp.ServerSchema{testSchema("config-mcp", "Loaded from config yaml")}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	cfg := camconfig.CamConfig{
+		Repositories: map[string]camconfig.RepoSources{
+			"mcpServers": {Sources: []camconfig.RepoSource{{Type: "remote", URL: server.URL + "/config.yaml"}}},
+		},
+	}
+
+	// When
+	registry, err := mcp.LoadRegistryFromConfig(cfg)
+
+	// Then
+	if err != nil {
+		t.Fatalf("LoadRegistryFromConfig err = %v", err)
+	}
+	if _, ok := registry.Get("config-mcp"); !ok {
+		t.Fatal("expected config-mcp from config.yaml-derived dist/servers.json")
+	}
+}
+
+func TestLoadRegistryStoresCatalogInDatabase(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	t.Setenv("CAM_DB_PATH", filepath.Join(dir, "cam.db"))
+	path := filepath.Join(dir, "mcp_servers.json")
+	writeCatalog(t, path, []mcp.ServerSchema{testSchema("db-mcp", "Stored in database")})
+	cfg := testCatalogConfig(path)
+
+	// When
+	_, err := mcp.LoadRegistryFromConfig(cfg)
+
+	// Then
+	if err != nil {
+		t.Fatalf("LoadRegistryFromConfig err = %v", err)
+	}
+	db, err := sql.Open("sqlite", filepath.Join(dir, "cam.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM mcp_catalog_items WHERE name = 'db-mcp'`).Scan(&count); err != nil {
+		t.Fatalf("query mcp_catalog_items: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected db-mcp stored in database, got count %d", count)
 	}
 }
 

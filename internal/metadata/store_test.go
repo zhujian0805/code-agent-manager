@@ -585,6 +585,53 @@ func TestRefreshAllPreservesInstalledStatus(t *testing.T) {
 	}
 }
 
+type failingBrowser struct{}
+
+func (failingBrowser) ListTree(context.Context, string, string, string) (TreeListing, error) {
+	return TreeListing{}, fmt.Errorf("rate limited")
+}
+
+func (failingBrowser) FetchFile(context.Context, string, string, string, string) ([]byte, error) {
+	return nil, fmt.Errorf("rate limited")
+}
+
+func TestRefreshAllDoesNotDeleteExistingRowsWhenKindRefreshFails(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("CAM_CONFIG_DIR", dir)
+	writeFile(t, filepath.Join(dir, "config.yaml"), `repositories:
+  skills:
+    sources:
+      - type: local
+        path: `+filepath.ToSlash(filepath.Join(dir, "skill_repos.json"))+`
+cache:
+  enabled: false
+`)
+	writeFile(t, filepath.Join(dir, "skill_repos.json"), `{"example/repo":{"owner":"example","name":"repo","branch":"main","enabled":true}}`)
+
+	s := NewStore(filepath.Join(dir, "cam.db"))
+	if err := s.UpsertItem(ctx, Item{Kind: "skill", Name: "existing", RepoOwner: "example", RepoName: "repo", RepoBranch: "main", ItemPath: "skills/existing", InstallKey: "example/repo:existing", TargetApps: "claude"}); err != nil {
+		t.Fatalf("UpsertItem: %v", err)
+	}
+	svc := NewService(s).WithBrowser(failingBrowser{})
+
+	summary, err := svc.RefreshAll(ctx)
+	if err != nil {
+		t.Fatalf("RefreshAll: %v", err)
+	}
+	if len(summary.FailedSources) == 0 {
+		t.Fatal("expected failed source")
+	}
+	items, err := s.Search(ctx, SearchQuery{Kind: "skill", Query: "existing"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected existing skill preserved after failed refresh, got %d", len(items))
+	}
+}
+
 func TestInstallItem(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

@@ -35,6 +35,82 @@ func TestAwesomePromptsEmbedded_hasRequiredPromptFields(t *testing.T) {
 	}
 }
 
+func TestSyncAllUsesAwesomePromptsConfigYaml(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	t.Setenv("CAM_CONFIG_DIR", dir)
+	ctx := context.Background()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/config.yaml":
+			w.Header().Set("Content-Type", "text/yaml")
+			_, _ = w.Write([]byte("output:\n  dir: dist\n  formats: [json]\n"))
+		case "/dist/prompts.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"version":"1.0.0","prompts":[{"slug":"configured","title":"Configured Prompt","description":"Configured description","prompt":"Use configured source","tags":["configured"],"category":"repo-config","author":"tester","variables":[]}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	svc := NewService()
+	svc.configURL = server.URL + "/config.yaml"
+
+	// When
+	n, err := svc.SyncAll(ctx)
+
+	// Then
+	if err != nil {
+		t.Fatalf("SyncAll: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 prompt synced, got %d", n)
+	}
+	stored, err := svc.store.ListPrompts(ctx, "awesome_prompts", "")
+	if err != nil {
+		t.Fatalf("ListPrompts: %v", err)
+	}
+	if len(stored) != 1 || stored[0].Title != "Configured Prompt" {
+		t.Fatalf("expected configured prompt, got %+v", stored)
+	}
+}
+
+func TestSyncAllUsesExplicitAwesomePromptsURLOverride(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	t.Setenv("CAM_CONFIG_DIR", dir)
+	ctx := context.Background()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/default/prompts.json" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"version":"1.0.0","prompts":[{"slug":"configured","title":"Configured Prompt","description":"Configured description","prompt":"Use configured source","tags":["configured"],"category":"repo-config","author":"tester","variables":[]}]}`))
+	}))
+	defer server.Close()
+	svc := NewService()
+	svc.sourceURL = server.URL + "/default/prompts.json"
+	svc.preferSourceURLDirect = true
+
+	// When
+	n, err := svc.SyncAll(ctx)
+
+	// Then
+	if err != nil {
+		t.Fatalf("SyncAll: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 prompt synced, got %d", n)
+	}
+	stored, err := svc.store.ListPrompts(ctx, "awesome_prompts", "")
+	if err != nil {
+		t.Fatalf("ListPrompts: %v", err)
+	}
+	if len(stored) != 1 || stored[0].Title != "Configured Prompt" {
+		t.Fatalf("expected configured prompt, got %+v", stored)
+	}
+}
+
 func TestSyncAll_storesAwesomePrompts_whenRemoteUnavailable(t *testing.T) {
 	// Given
 	dir := t.TempDir()
@@ -42,6 +118,7 @@ func TestSyncAll_storesAwesomePrompts_whenRemoteUnavailable(t *testing.T) {
 	ctx := context.Background()
 	svc := NewService()
 	svc.sourceURL = "http://127.0.0.1:1/prompts.json"
+	svc.preferSourceURLDirect = true
 
 	// When
 	n, err := svc.SyncAll(ctx)
@@ -75,6 +152,7 @@ func TestSyncAll_mapsRemoteAwesomePromptsFields(t *testing.T) {
 	defer server.Close()
 	svc := NewService()
 	svc.sourceURL = server.URL
+	svc.preferSourceURLDirect = true
 
 	// When
 	n, err := svc.SyncAll(ctx)
@@ -109,6 +187,7 @@ func TestSyncAll_removesRetiredPromptSources(t *testing.T) {
 	ctx := context.Background()
 	svc := NewService()
 	svc.sourceURL = "http://127.0.0.1:1/prompts.json"
+	svc.preferSourceURLDirect = true
 	for _, source := range []string{"claude", "prompts_chat", "promptingguide"} {
 		if err := svc.store.UpsertPrompt(ctx, &Prompt{Source: source, SourceURL: source + "://old", Title: "old", Content: "old"}); err != nil {
 			t.Fatalf("UpsertPrompt(%s): %v", source, err)

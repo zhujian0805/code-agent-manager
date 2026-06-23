@@ -30,6 +30,17 @@ describe('Library page', () => {
     expect(badges.textContent).toMatch(/claude/i)
   })
 
+  it('shows resource descriptions in the list view', async () => {
+    const described = metadataItem({ name: 'described-skill', kind: 'skill', install_key: 'o/r:described-skill', description: 'Helpful skill details' })
+    vi.spyOn(api, 'searchMetadata').mockResolvedValue({ items: [described], total: 1, limit: 20, offset: 0 })
+
+    render(<Library kind="skill" />)
+
+    expect(await screen.findByText(/described-skill/i)).toBeInTheDocument()
+    expect(screen.getByText(/helpful skill details/i)).toBeInTheDocument()
+    vi.restoreAllMocks()
+  })
+
   it('searches the metadata index', async () => {
     render(<Library kind="skill" />)
     expect(await screen.findByText(/golang-testing/i)).toBeInTheDocument()

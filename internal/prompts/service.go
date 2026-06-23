@@ -7,17 +7,25 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"strings"
 	"time"
+
+	"github.com/chat2anyllm/code-agent-manager/internal/catalogconfig"
+	"github.com/chat2anyllm/code-agent-manager/internal/entities"
+	"github.com/chat2anyllm/code-agent-manager/internal/repoconfig"
 )
 
 const (
-	awesomePromptsSource  = "awesome_prompts"
-	awesomePromptsName    = "Awesome Prompts"
-	awesomePromptsURL     = "https://raw.githubusercontent.com/Chat2AnyLLM/awesome-prompts/master/dist/prompts.json"
-	awesomePromptsRepoURL = "https://github.com/Chat2AnyLLM/awesome-prompts/blob/master/prompts"
-	awesomePromptsURLEnv  = "CAM_AWESOME_PROMPTS_URL"
+	awesomePromptsSource    = "awesome_prompts"
+	awesomePromptsName      = "Awesome Prompts"
+	awesomePromptsURL       = "https://raw.githubusercontent.com/Chat2AnyLLM/awesome-prompts/master/dist/prompts.json"
+	awesomePromptsConfigURL = "https://raw.githubusercontent.com/Chat2AnyLLM/awesome-prompts/master/config.yaml"
+	awesomePromptsRepoURL   = "https://github.com/Chat2AnyLLM/awesome-prompts/blob/master/prompts"
+	awesomePromptsURLEnv    = "CAM_AWESOME_PROMPTS_URL"
+	githubRawBaseURL        = "https://raw.githubusercontent.com"
 )
 
 var retiredPromptSources = []string{"claude", "prompts_chat", "promptingguide"}
@@ -29,9 +37,12 @@ var awesomePromptsJSON []byte
 
 // Service handles fetching and syncing prompts from external sources.
 type Service struct {
-	store     *Store
-	client    *http.Client
-	sourceURL string
+	store                 *Store
+	client                *http.Client
+	configURL             string
+	sourceURL             string
+	repoRawBaseURL        string
+	preferSourceURLDirect bool
 }
 
 // NewService creates a new prompts service.
@@ -45,7 +56,9 @@ func NewService() *Service {
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		sourceURL: sourceURL,
+		configURL:      awesomePromptsConfigURL,
+		sourceURL:      sourceURL,
+		repoRawBaseURL: githubRawBaseURL,
 	}
 }
 
@@ -88,7 +101,8 @@ func (s *Service) FetchAwesomePrompts(ctx context.Context) ([]AwesomePrompt, err
 }
 
 func (s *Service) fetchRemoteAwesomePrompts(ctx context.Context) ([]AwesomePrompt, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.sourceURL, nil)
+	sourceURL := s.resolveAwesomePromptsURL(ctx)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +119,62 @@ func (s *Service) fetchRemoteAwesomePrompts(ctx context.Context) ([]AwesomePromp
 		return nil, err
 	}
 	return parseAwesomePrompts(body)
+}
+
+func (s *Service) resolveAwesomePromptsURL(ctx context.Context) string {
+	if strings.TrimSpace(os.Getenv(awesomePromptsURLEnv)) != "" || s.preferSourceURLDirect {
+		return s.sourceURL
+	}
+	if url, err := s.resolveConfigDataURL(ctx); err == nil {
+		return url
+	}
+	repos, err := repoconfig.LoadEnabled(entities.KindPrompt)
+	if err != nil {
+		return s.sourceURL
+	}
+	entry, ok := repos["Chat2AnyLLM/awesome-prompts"]
+	if !ok {
+		return s.sourceURL
+	}
+	catalogFile := strings.Trim(strings.TrimSpace(entry.CatalogFile), "/")
+	if catalogFile == "" {
+		catalogFile = "dist/prompts.json"
+	}
+	if url := entry.RawFileURL(s.repoRawBaseURL, catalogFile); url != "" {
+		return url
+	}
+	return s.sourceURL
+}
+
+func (s *Service) resolveConfigDataURL(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.configURL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("awesome_prompts config: status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	dataFile, err := catalogconfig.DataFile("prompts", body)
+	if err != nil {
+		return "", err
+	}
+	base, err := url.Parse(s.configURL)
+	if err != nil {
+		return "", err
+	}
+	base.Path = path.Join(path.Dir(base.Path), dataFile)
+	base.RawQuery = ""
+	base.Fragment = ""
+	return base.String(), nil
 }
 
 func (s *Service) syncAwesomePrompts(ctx context.Context, prompts []AwesomePrompt) (int, error) {
